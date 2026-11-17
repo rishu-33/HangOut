@@ -1,0 +1,25 @@
+{
+  "name": "hangout-platform",
+  "version": "1.0.0",
+  "description": "Premium real-time social hangout platform",
+  "scripts": {
+    "install-all": "cd server && npm install && cd ../client && npm install",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build"
+  },
+  "keywords": [
+    "chat",
+    "realtime",
+    "socket.io",
+    "mern",
+    "react",
+    "mongodb"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
