@@ -8,9 +8,10 @@ export const initializeSocket = (token) => {
   }
 
   socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
-    auth: {
-      token
-    }
+    auth: { token },
+    transports: ['websocket'],   // skip HTTP polling → instant connection
+    reconnectionDelay: 500,
+    reconnectionAttempts: 10
   });
 
   return socket;

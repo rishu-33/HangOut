@@ -129,11 +129,24 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
   };
 
   const handleReact = async (emoji) => {
+    // ── Optimistic: toggle the reaction locally right away ───────────
+    const userId = currentUser?._id;
+    const existing = message.reactions || [];
+    const alreadyReacted = existing.some(r => r.emoji === emoji && String(r.user) === String(userId));
+    const optimisticReactions = alreadyReacted
+      ? existing.filter(r => !(r.emoji === emoji && String(r.user) === String(userId)))
+      : [...existing, { emoji, user: userId }];
+
+    onReaction?.(message._id, optimisticReactions);
+    setShowEmojiPicker(false);
+
     try {
       const { data } = await api.post(`/messages/${message._id}/react`, { emoji });
+      // Sync with server truth
       onReaction?.(message._id, data.reactions);
-      setShowEmojiPicker(false);
     } catch {
+      // Revert on failure
+      onReaction?.(message._id, existing);
       toast.error('Failed to add reaction');
     }
   };
@@ -153,8 +166,8 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.15 }}
+      animate={{ opacity: message._optimistic ? 0.65 : 1, y: 0 }}
+      transition={{ duration: 0.12 }}
       className={`flex items-end gap-2.5 ${isOwn ? 'flex-row-reverse' : 'flex-row'} group ${
         isMentioned ? 'relative' : ''
       }`}
@@ -179,7 +192,9 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
             {message.sender?.username}
           </span>
           <span className="text-[10px] text-secondary/50 leading-none">
-            {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
+            {message._optimistic
+              ? <span className="opacity-60 animate-pulse">sending…</span>
+              : formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
           </span>
         </div>
 

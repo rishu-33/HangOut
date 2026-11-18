@@ -320,6 +320,7 @@ const Room = () => {
     // New message received
     socket.on('new-message', (message) => {
       setMessages(prev => {
+        // Ignore if already present (real or optimistic already replaced)
         if (prev.some(m => String(m._id) === String(message._id))) return prev;
         return [...prev, message];
       });
@@ -409,34 +410,55 @@ const Room = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    const text = newMessage.trim();
+    if (!text) return;
 
-    // Clear typing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
 
     const replyId = replyTo?._id;
+    const replySnapshot = replyTo;
     setReplyTo(null);
     setShowMentions(false);
+    setNewMessage('');
+
+    const socket = getSocket();
+    if (socket) socket.emit('typing-stop', roomId);
+
+    // ── Optimistic message: show immediately with a temp ID ──────────
+    const tempId = `temp-${Date.now()}`;
+    const optimistic = {
+      _id: tempId,
+      content: text,
+      sender: user,
+      createdAt: new Date().toISOString(),
+      type: 'text',
+      reactions: [],
+      replyTo: replySnapshot
+        ? { _id: replyId, content: replySnapshot.content, sender: replySnapshot.sender }
+        : null,
+      _optimistic: true
+    };
+    setMessages(prev => [...prev, optimistic]);
 
     try {
-      const socket = getSocket();
-      if (socket) socket.emit('typing-stop', roomId);
-
       const { data } = await api.post(`/messages/${roomId}`, {
-        content: newMessage,
+        content: text,
         ...(replyId ? { replyTo: replyId } : {})
       });
 
-      setMessages(prev => [...prev, data]);
-      setNewMessage('');
+      // Replace optimistic bubble with real server message
+      setMessages(prev => prev.map(m => m._id === tempId ? data : m));
 
       if (socket) {
         socket.emit('send-message', { roomId, message: data });
       }
     } catch (error) {
+      // Remove failed optimistic bubble and restore input
+      setMessages(prev => prev.filter(m => m._id !== tempId));
+      setNewMessage(text);
       toast.error('Failed to send message');
     }
   };
