@@ -11,9 +11,11 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
+    { urls: 'stun:stun.cloudflare.com:3478' }
   ]
 };
+
+const sameId = (a, b) => String(a) === String(b);
 
 const VoiceChat = ({ roomId, onClose }) => {
   const { user } = useAuthStore();
@@ -28,9 +30,14 @@ const VoiceChat = ({ roomId, onClose }) => {
   const localStreamRef = useRef(null);
   const peerConnectionsRef = useRef(new Map()); // peerId -> RTCPeerConnection
   const remoteAudioRefs = useRef(new Map()); // peerId -> HTMLAudioElement
+  const pendingIceRef = useRef(new Map()); // peerId -> ICE candidates waiting for a remote description
   const inCallRef = useRef(false);
+  const deafenedRef = useRef(false);
 
   const code = roomId?.toUpperCase();
+  const codeRef = useRef(code);
+  codeRef.current = code;
+  const myId = user?._id ? String(user._id) : '';
 
   // Cleanup all peer connections
   const cleanupConnections = useCallback(() => {
@@ -42,8 +49,10 @@ const VoiceChat = ({ roomId, onClose }) => {
     remoteAudioRefs.current.forEach((audio) => {
       audio.pause();
       audio.srcObject = null;
+      audio.remove();
     });
     remoteAudioRefs.current.clear();
+    pendingIceRef.current.clear();
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -73,7 +82,7 @@ const VoiceChat = ({ roomId, onClose }) => {
         const socket = getSocket();
         if (socket) {
           socket.emit('voice-ice-candidate', {
-            roomId: code,
+            roomId: codeRef.current,
             targetUserId: peerId,
             candidate: event.candidate
           });
@@ -83,15 +92,20 @@ const VoiceChat = ({ roomId, onClose }) => {
 
     // Handle remote audio stream
     pc.ontrack = (event) => {
-      const [remoteStream] = event.streams;
+      const remoteStream = event.streams[0] || new MediaStream([event.track]);
+
       let audio = remoteAudioRefs.current.get(peerId);
       if (!audio) {
         audio = new Audio();
         audio.autoplay = true;
+        audio.setAttribute('playsinline', 'true');
+        audio.style.display = 'none';
+        document.body.appendChild(audio);
         remoteAudioRefs.current.set(peerId, audio);
       }
       audio.srcObject = remoteStream;
-      audio.muted = isDeafened;
+      audio.muted = deafenedRef.current;
+      audio.play().catch(() => {});
     };
 
     // Handle connection state
@@ -102,7 +116,7 @@ const VoiceChat = ({ roomId, onClose }) => {
     };
 
     return pc;
-  }, [code, isDeafened]);
+  }, []);
 
   // Join voice channel
   const joinVoice = async () => {
@@ -120,18 +134,21 @@ const VoiceChat = ({ roomId, onClose }) => {
       });
 
       localStreamRef.current = stream;
+      inCallRef.current = true;
 
       const socket = getSocket();
-      if (!socket) {
+      if (!socket || !socket.connected) {
         toast.error('Not connected to server');
         stream.getTracks().forEach((t) => t.stop());
+        localStreamRef.current = null;
+        inCallRef.current = false;
         setConnecting(false);
         return;
       }
 
-      // Join the voice channel
+      // Mark ourselves in-call before the server tells anyone else,
+      // so the incoming offer is not dropped by a stale render.
       socket.emit('voice-join', { roomId: code });
-      inCallRef.current = true;
       setInCall(true);
       setConnecting(false);
 
@@ -189,6 +206,7 @@ const VoiceChat = ({ roomId, onClose }) => {
   // Toggle deafen
   const toggleDeafen = () => {
     const newDeafened = !isDeafened;
+    deafenedRef.current = newDeafened;
     setIsDeafened(newDeafened);
 
     // Mute/unmute all remote audio elements
@@ -202,53 +220,83 @@ const VoiceChat = ({ roomId, onClose }) => {
     }
   };
 
-  // Setup socket listeners for voice signaling
+  // Setup socket listeners for voice signaling.
+  // These stay attached for the life of the panel and read the live call
+  // state from refs, so an offer that arrives immediately after Join is kept.
   useEffect(() => {
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket || !myId) return;
 
-    // When another user joins voice
-    const onVoiceUserJoined = async ({ userId, username, avatar }) => {
-      if (userId === user._id) return;
+    const shouldOffer = (otherId) => myId > String(otherId);
 
-      setParticipants((prev) => {
-        if (prev.some((p) => p.userId === userId)) return prev;
-        return [...prev, { userId, username, avatar, isMuted: false }];
-      });
-
-      // If we're in the call, create offer for the new user
-      if (inCall && localStreamRef.current) {
-        const pc = createPeerConnection(userId, username);
-
+    const flushIce = async (peerId) => {
+      const pc = peerConnectionsRef.current.get(String(peerId));
+      const queued = pendingIceRef.current.get(String(peerId)) || [];
+      if (!pc?.remoteDescription || queued.length === 0) return;
+      pendingIceRef.current.delete(String(peerId));
+      for (const candidate of queued) {
         try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-
-          socket.emit('voice-offer', {
-            roomId: code,
-            targetUserId: userId,
-            offer: pc.localDescription
-          });
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
-          console.error('Failed to create offer:', err);
+          console.error('Failed to add queued ICE candidate:', err);
         }
       }
     };
 
-    // When we receive an offer from another user
-    const onVoiceOffer = async ({ fromUserId, fromUsername, offer }) => {
-      if (!inCall || !localStreamRef.current) return;
+    const offerToPeer = async (peerId, username) => {
+      if (!inCallRef.current || !localStreamRef.current) return;
+      if (!shouldOffer(peerId)) return;
 
-      const pc = createPeerConnection(fromUserId, fromUsername);
+      const pc = createPeerConnection(String(peerId), username);
+      if (pc.signalingState !== 'stable' || pc.currentLocalDescription || pc.currentRemoteDescription) {
+        return;
+      }
 
       try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('voice-offer', {
+          roomId: codeRef.current,
+          targetUserId: String(peerId),
+          offer: pc.localDescription
+        });
+      } catch (err) {
+        console.error('Failed to create offer:', err);
+      }
+    };
+
+    const rememberParticipant = (person) => {
+      setParticipants((prev) => {
+        if (prev.some((p) => sameId(p.userId, person.userId))) return prev;
+        return [...prev, { ...person, isMuted: person.isMuted || false }];
+      });
+    };
+
+    const onVoiceUserJoined = ({ userId, username, avatar }) => {
+      if (sameId(userId, myId)) return;
+      rememberParticipant({ userId: String(userId), username, avatar, isMuted: false });
+      offerToPeer(userId, username);
+    };
+
+    const onVoiceOffer = async ({ fromUserId, fromUsername, offer }) => {
+      if (!inCallRef.current || !localStreamRef.current) return;
+
+      const peerId = String(fromUserId);
+      const pc = createPeerConnection(peerId, fromUsername);
+
+      try {
+        if (pc.signalingState === 'have-local-offer') {
+          if (shouldOffer(peerId)) return;
+          await pc.setLocalDescription({ type: 'rollback' });
+        }
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        await flushIce(peerId);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         socket.emit('voice-answer', {
-          roomId: code,
-          targetUserId: fromUserId,
+          roomId: codeRef.current,
+          targetUserId: peerId,
           answer: pc.localDescription
         });
       } catch (err) {
@@ -256,22 +304,27 @@ const VoiceChat = ({ roomId, onClose }) => {
       }
     };
 
-    // When we receive an answer
     const onVoiceAnswer = async ({ fromUserId, answer }) => {
-      const pc = peerConnectionsRef.current.get(fromUserId);
-      if (!pc) return;
+      const pc = peerConnectionsRef.current.get(String(fromUserId));
+      if (!pc || pc.signalingState !== 'have-local-offer') return;
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await flushIce(fromUserId);
       } catch (err) {
         console.error('Failed to set remote description:', err);
       }
     };
 
-    // When we receive an ICE candidate
     const onVoiceIceCandidate = async ({ fromUserId, candidate }) => {
-      const pc = peerConnectionsRef.current.get(fromUserId);
-      if (!pc) return;
+      const peerId = String(fromUserId);
+      const pc = peerConnectionsRef.current.get(peerId);
+      if (!pc || !pc.remoteDescription) {
+        const queued = pendingIceRef.current.get(peerId) || [];
+        queued.push(candidate);
+        pendingIceRef.current.set(peerId, queued);
+        return;
+      }
 
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -280,39 +333,39 @@ const VoiceChat = ({ roomId, onClose }) => {
       }
     };
 
-    // When a user leaves voice
-    const onVoiceUserLeft = ({ userId, username }) => {
-      setParticipants((prev) => prev.filter((p) => p.userId !== userId));
+    const onVoiceUserLeft = ({ userId }) => {
+      const peerId = String(userId);
+      setParticipants((prev) => prev.filter((p) => !sameId(p.userId, peerId)));
 
-      // Clean up their peer connection
-      const pc = peerConnectionsRef.current.get(userId);
+      const pc = peerConnectionsRef.current.get(peerId);
       if (pc) {
         pc.close();
-        peerConnectionsRef.current.delete(userId);
+        peerConnectionsRef.current.delete(peerId);
       }
+      pendingIceRef.current.delete(peerId);
 
-      const audio = remoteAudioRefs.current.get(userId);
+      const audio = remoteAudioRefs.current.get(peerId);
       if (audio) {
         audio.pause();
         audio.srcObject = null;
-        remoteAudioRefs.current.delete(userId);
+        audio.remove();
+        remoteAudioRefs.current.delete(peerId);
       }
     };
 
-    // When a user toggles mute
     const onVoiceMuteToggle = ({ userId, isMuted: muted }) => {
       setParticipants((prev) =>
-        prev.map((p) => (p.userId === userId ? { ...p, isMuted: muted } : p))
+        prev.map((p) => (sameId(p.userId, userId) ? { ...p, isMuted: muted } : p))
       );
     };
 
-    // Current voice participants (received when joining)
     const onVoiceParticipants = (list) => {
-      setParticipants(
-        list
-          .filter((p) => p.userId !== user._id)
-          .map((p) => ({ ...p, isMuted: p.isMuted || false }))
-      );
+      const others = (list || [])
+        .filter((p) => !sameId(p.userId, myId))
+        .map((p) => ({ ...p, userId: String(p.userId), isMuted: p.isMuted || false }));
+
+      setParticipants(others);
+      others.forEach((person) => offerToPeer(person.userId, person.username));
     };
 
     socket.on('voice-user-joined', onVoiceUserJoined);
@@ -332,7 +385,7 @@ const VoiceChat = ({ roomId, onClose }) => {
       socket.off('voice-mute-toggle', onVoiceMuteToggle);
       socket.off('voice-participants', onVoiceParticipants);
     };
-  }, [inCall, code, user._id, createPeerConnection]);
+  }, [myId, createPeerConnection]);
 
   // Cleanup on unmount / room change
   useEffect(() => {

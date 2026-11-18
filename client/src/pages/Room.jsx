@@ -605,7 +605,7 @@ const Room = () => {
             <button onClick={() => setShowGames(!showGames)} className={`p-2 rounded-lg transition-colors ${showGames ? 'text-accent bg-accent/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Games">
               <Gamepad2 className="w-4 h-4" />
             </button>
-            <button onClick={() => setShowVoiceChat(!showVoiceChat)} className={`p-2 rounded-lg transition-colors ${showVoiceChat ? 'text-green-400 bg-green-400/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Voice Chat">
+            <button onClick={() => setShowVoiceChat(true)} className={`p-2 rounded-lg transition-colors ${showVoiceChat ? 'text-green-400 bg-green-400/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Voice Chat">
               <Mic className="w-4 h-4" />
             </button>
             <button onClick={() => setShowMembers(!showMembers)} className={`p-2 rounded-lg transition-colors ${showMembers ? 'text-accent bg-accent/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Members">

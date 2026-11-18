@@ -277,7 +277,12 @@ io.on('connection', (socket) => {
   // Join voice channel
   socket.on('voice-join', ({ roomId }) => {
     const code = roomCode(roomId);
-    if (!code || !socket.rooms.has(code)) return;
+    if (!code) return;
+
+    // Make sure this socket is in the chat room before voice events are broadcast.
+    socket.join(code);
+    const chatUser = activeUsers.get(socket.userId);
+    if (chatUser) chatUser.rooms.add(code);
 
     if (!voiceRooms.has(code)) {
       voiceRooms.set(code, new Map());
