@@ -3,6 +3,28 @@ import Room from '../models/Room.js';
 import uploadToCloudinary from '../utils/uploadToCloudinary.js';
 import { getIO } from '../socket.js';
 
+// In-memory room cache: roomId (uppercase) -> { _id, memberIds: Set }
+// Avoids a DB roundtrip on every single message send
+const roomCache = new Map();
+
+async function getRoomCached(roomId) {
+  const code = roomId.toUpperCase();
+  if (roomCache.has(code)) return roomCache.get(code);
+
+  const room = await Room.findOne({ roomId: code }).select('_id members').lean();
+  if (!room) return null;
+
+  const entry = {
+    _id: room._id,
+    memberIds: new Set(room.members.map(m => m.user.toString()))
+  };
+  roomCache.set(code, entry);
+
+  // Invalidate after 60s so membership changes are picked up
+  setTimeout(() => roomCache.delete(code), 60_000);
+  return entry;
+}
+
 const isRoomMember = (room, userId) =>
   room.members.some((member) => member.user.toString() === userId.toString());
 
@@ -64,20 +86,14 @@ export const sendMessage = async (req, res) => {
     const { roomId } = req.params;
     const { content, replyTo } = req.body;
 
-    // Find room and verify membership
-    const room = await Room.findOne({ roomId: roomId.toUpperCase() });
-
-    if (!room) {
-      return res.status(404).json({ message: 'Room not found' });
-    }
-
-    const isMember = room.members.some(m => m.user.toString() === req.user._id.toString());
-
-    if (!isMember) {
+    // Use cached room to skip DB roundtrip for membership check
+    const room = await getRoomCached(roomId);
+    if (!room) return res.status(404).json({ message: 'Room not found' });
+    if (!room.memberIds.has(req.user._id.toString())) {
       return res.status(403).json({ message: 'You are not a member of this room' });
     }
 
-    // Create message
+    // Save to DB
     const message = await Message.create({
       room: room._id,
       sender: req.user._id,
@@ -86,21 +102,37 @@ export const sendMessage = async (req, res) => {
       replyTo: replyTo || null
     });
 
-    await message.populate('sender', 'username email avatar status');
+    // ── Emit IMMEDIATELY using data already in memory (no extra DB queries) ──
+    const io = getIO();
+    const instantPayload = {
+      _id: message._id,
+      room: room._id,
+      content: message.content,
+      type: message.type,
+      createdAt: message.createdAt,
+      reactions: [],
+      replyTo: null, // will be updated below for the HTTP response
+      sender: {
+        _id: req.user._id,
+        username: req.user.username,
+        avatar: req.user.avatar,
+        status: req.user.status
+      }
+    };
+    if (io) {
+      io.in(roomId.toUpperCase()).emit('new-message', instantPayload);
+    }
+
+    // Populate replyTo for the HTTP response (sender already in-memory above)
     if (replyTo) {
       await message.populate({
         path: 'replyTo',
         populate: { path: 'sender', select: 'username avatar' }
       });
+      instantPayload.replyTo = message.replyTo;
     }
 
-    // Broadcast to ALL clients in the room immediately (server-side, no client relay)
-    const io = getIO();
-    if (io) {
-      io.in(roomId.toUpperCase()).emit('new-message', message);
-    }
-
-    res.status(201).json(message);
+    res.status(201).json({ ...instantPayload, sender: req.user });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

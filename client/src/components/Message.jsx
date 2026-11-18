@@ -8,18 +8,16 @@ import Avatar from './Avatar';
 
 const quickEmojis = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
-// ── Render message text with code blocks + @mention highlighting ────────────
+// ── Render message text with code blocks + @mention highlighting ──────────────
 const renderContent = (text, currentUsername) => {
   if (!text) return null;
 
-  // Split on ```code``` blocks
   const codeBlockRegex = /```([\s\S]*?)```/g;
   const parts = [];
   let lastIndex = 0;
   let match;
 
   while ((match = codeBlockRegex.exec(text)) !== null) {
-    // Text before code block
     if (match.index > lastIndex) {
       parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
     }
@@ -27,7 +25,6 @@ const renderContent = (text, currentUsername) => {
     lastIndex = match.index + match[0].length;
   }
 
-  // Remaining text after last code block
   if (lastIndex < text.length) {
     parts.push({ type: 'text', content: text.slice(lastIndex) });
   }
@@ -39,7 +36,6 @@ const renderContent = (text, currentUsername) => {
       return <CodeBlock key={i} code={part.content} />;
     }
 
-    // Inline text: highlight @mentions
     const mentionRegex = /(@\w+)/g;
     const segments = part.content.split(mentionRegex);
     return (
@@ -67,24 +63,19 @@ const renderContent = (text, currentUsername) => {
   });
 };
 
-// ── Code block with copy button ─────────────────────────────────────────────
+// ── Code block ────────────────────────────────────────────────────────────────
 const CodeBlock = ({ code }) => {
   const [copied, setCopied] = useState(false);
-
   const copy = () => {
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
   return (
-    <div className="my-2 rounded-xl overflow-hidden border border-white/10 bg-[#0d0e10] text-left">
+    <div className="my-1.5 rounded-xl overflow-hidden border border-white/10 bg-[#0d0e10] text-left">
       <div className="flex items-center justify-between px-3 py-1.5 bg-white/4 border-b border-white/8">
         <span className="text-[10px] text-secondary/60 font-mono uppercase tracking-widest">code</span>
-        <button
-          onClick={copy}
-          className="flex items-center gap-1 text-[11px] text-secondary hover:text-primary transition-colors"
-        >
+        <button onClick={copy} className="flex items-center gap-1 text-[11px] text-secondary hover:text-primary transition-colors">
           {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
           {copied ? 'Copied!' : 'Copy'}
         </button>
@@ -96,7 +87,7 @@ const CodeBlock = ({ code }) => {
   );
 };
 
-// ── Main Message component ───────────────────────────────────────────────────
+// ── Main Message component ────────────────────────────────────────────────────
 const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
   const isOwn = message.sender?._id === currentUser?._id;
   const isMentioned = message.content?.includes(`@${currentUser?.username}`);
@@ -129,7 +120,6 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
   };
 
   const handleReact = async (emoji) => {
-    // ── Optimistic: toggle the reaction locally right away ───────────
     const userId = currentUser?._id;
     const existing = message.reactions || [];
     const alreadyReacted = existing.some(r => r.emoji === emoji && String(r.user) === String(userId));
@@ -142,84 +132,80 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
 
     try {
       const { data } = await api.post(`/messages/${message._id}/react`, { emoji });
-      // Sync with server truth
       onReaction?.(message._id, data.reactions);
     } catch {
-      // Revert on failure
       onReaction?.(message._id, existing);
       toast.error('Failed to add reaction');
     }
   };
 
-  // ── System message ─────────────────────────────────────────────────────
+  // ── System message ──────────────────────────────────────────────────────────
   if (message.type === 'system') {
     return (
-      <div className="flex justify-center py-0.5">
-        <span className="px-3 py-1 rounded-full bg-white/5 text-[11px] text-secondary/70 tracking-wide">
+      <div className="flex justify-center py-1">
+        <span className="px-3 py-1 rounded-full bg-white/5 text-[11px] text-secondary/60 tracking-wide">
           {message.content}
         </span>
       </div>
     );
   }
 
-  // ── Bubble row ─────────────────────────────────────────────────────────
+  // ── Bubble row ──────────────────────────────────────────────────────────────
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: message._optimistic ? 0.65 : 1, y: 0 }}
-      transition={{ duration: 0.12 }}
-      className={`flex items-end gap-2.5 ${isOwn ? 'flex-row-reverse' : 'flex-row'} group ${
-        isMentioned ? 'relative' : ''
-      }`}
+      transition={{ duration: 0.1 }}
+      className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} group`}
       onMouseEnter={revealActions}
       onMouseLeave={scheduleHide}
     >
-      {/* Mention glow strip */}
-      {isMentioned && !isOwn && (
-        <div className="absolute -left-4 top-0 bottom-0 w-0.5 bg-yellow-400/60 rounded-full" />
-      )}
-
-      {/* Avatar */}
+      {/* Avatar — always visible for sizing consistency */}
       <div className="w-7 h-7 shrink-0 mb-0.5">
         <Avatar user={message.sender} size="xs" />
       </div>
 
-      {/* Bubble column */}
-      <div className={`flex flex-col gap-1 max-w-[72%] sm:max-w-[62%] ${isOwn ? 'items-end' : 'items-start'}`}>
-        {/* Name + time */}
-        <div className={`flex items-center gap-1.5 px-1 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
-          <span className="text-[12px] font-semibold text-primary/80 leading-none">
+      {/* Bubble column — inline width, not full */}
+      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[70%] sm:max-w-[60%] min-w-0`}>
+
+        {/* Name + time row */}
+        <div className={`flex items-baseline gap-1.5 mb-1 px-0.5 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+          <span className="text-[11.5px] font-semibold text-primary/75 leading-none truncate">
             {message.sender?.username}
           </span>
-          <span className="text-[10px] text-secondary/50 leading-none">
+          <span className="text-[10px] text-secondary/40 leading-none whitespace-nowrap shrink-0">
             {message._optimistic
-              ? <span className="opacity-60 animate-pulse">sending…</span>
+              ? <span className="animate-pulse">sending…</span>
               : formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
           </span>
         </div>
 
-        {/* Bubble */}
-        <div className="relative w-full">
+        {/* Mention indicator strip */}
+        {isMentioned && !isOwn && (
+          <div className="self-stretch h-0.5 w-6 bg-yellow-400/60 rounded-full mb-1 ml-1" />
+        )}
+
+        {/* The bubble itself */}
+        <div className="relative">
           <div
-            className={`relative px-3.5 py-2 text-[14px] leading-relaxed shadow-sm w-full ${
+            className={`relative px-3.5 py-2.5 text-[13.5px] leading-relaxed shadow-sm break-words ${
               isOwn
-                ? 'bg-accent text-white rounded-2xl rounded-br-sm'
-                : `bg-surface border text-primary rounded-2xl rounded-bl-sm ${
-                    isMentioned ? 'border-yellow-400/30 bg-yellow-400/5' : 'border-white/6'
+                ? 'bg-accent text-white rounded-2xl rounded-br-[4px]'
+                : `bg-[#1c1d20] border text-primary rounded-2xl rounded-bl-[4px] ${
+                    isMentioned ? 'border-yellow-400/25 bg-yellow-400/4' : 'border-white/[0.07]'
                   }`
             }`}
           >
             {/* Reply preview */}
             {message.replyTo && (
               <div
-                className={`mb-2 pb-1.5 border-b text-[11px] rounded-t-lg ${
-                  isOwn ? 'border-white/15 opacity-70' : 'border-white/8 text-secondary'
+                className={`mb-2 pb-2 border-b text-[11px] rounded-t-lg opacity-80 ${
+                  isOwn ? 'border-white/20' : 'border-white/10 text-secondary'
                 }`}
               >
-                <span className="opacity-60">↩ </span>
-                <span className="font-semibold">{message.replyTo.sender?.username}</span>
-                <span className="opacity-60 ml-1">
-                  {message.replyTo.content?.slice(0, 60)}{message.replyTo.content?.length > 60 ? '…' : ''}
+                <span className="font-semibold">↩ {message.replyTo.sender?.username}</span>
+                <span className="ml-1.5 opacity-70">
+                  {message.replyTo.content?.slice(0, 55)}{message.replyTo.content?.length > 55 ? '…' : ''}
                 </span>
               </div>
             )}
@@ -229,8 +215,8 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
               <img
                 src={getFileUrl(message.file.url)}
                 alt={message.file.filename}
-                className="max-w-full max-h-72 rounded-xl mb-1.5 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                style={{ maxWidth: '320px' }}
+                className="max-w-full max-h-64 rounded-xl mb-1.5 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                style={{ maxWidth: '280px' }}
                 onError={(e) => { e.target.style.display = 'none'; }}
                 onClick={() => window.open(getFileUrl(message.file.url), '_blank')}
                 title="Click to view full size"
@@ -243,7 +229,7 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
                 href={getFileUrl(message.file.url)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 p-2.5 bg-black/10 rounded-xl hover:bg-black/20 transition-colors"
+                className="flex items-center gap-2 p-2.5 bg-black/15 rounded-xl hover:bg-black/25 transition-colors"
               >
                 <FileText className="w-4 h-4 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -254,39 +240,22 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
               </a>
             )}
 
-            {/* Text with code blocks + mention highlights */}
+            {/* Text */}
             {message.content && (
-              <div className="text-[14px] leading-relaxed">
+              <div className="text-[13.5px] leading-relaxed">
                 {renderContent(message.content, currentUser?.username)}
               </div>
             )}
           </div>
 
-          {/* Reactions */}
-          {message.reactions?.length > 0 && (
-            <div className={`flex flex-wrap gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-              {Object.entries(
-                message.reactions.reduce((acc, r) => { acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc; }, {})
-              ).map(([emoji, count]) => (
-                <button
-                  key={emoji}
-                  onClick={() => handleReact(emoji)}
-                  className="text-[11px] px-1.5 py-0.5 bg-surface border border-border rounded-full hover:border-accent/50 transition-colors"
-                >
-                  {emoji}{count > 1 ? ` ${count}` : ''}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Hover action bar */}
           {showActions && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.88 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.1 }}
+              transition={{ duration: 0.08 }}
               onMouseEnter={revealActions}
-              className={`absolute -top-8 ${isOwn ? 'right-0' : 'left-0'} flex gap-0.5 bg-surface/95 border border-white/8 rounded-full px-1 py-0.5 shadow-xl z-10 backdrop-blur-sm`}
+              className={`absolute -top-9 ${isOwn ? 'right-0' : 'left-0'} flex gap-0.5 bg-[#1c1d20]/98 border border-white/10 rounded-full px-1.5 py-1 shadow-2xl z-10 backdrop-blur-md`}
             >
               {/* Emoji */}
               <div className="relative">
@@ -305,13 +274,13 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
                     <motion.div
                       initial={{ opacity: 0, scale: 0.9, y: 4 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="bg-surface border border-border rounded-2xl p-2 shadow-2xl flex gap-1"
+                      className="bg-[#1c1d20] border border-white/10 rounded-2xl p-2 shadow-2xl flex gap-1"
                     >
                       {quickEmojis.map((e) => (
                         <button
                           key={e}
                           type="button"
-                          onMouseDown={(event) => event.preventDefault()}
+                          onMouseDown={(ev) => ev.preventDefault()}
                           onClick={() => { handleReact(e); setShowEmojiPicker(false); }}
                           className="text-lg p-1 hover:bg-white/8 rounded-lg transition-all hover:scale-125"
                         >
@@ -332,11 +301,11 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
                 <Reply className="w-3.5 h-3.5" />
               </button>
 
-              {/* Delete (own messages only) */}
+              {/* Delete (own only) */}
               {isOwn && (
                 <button
                   onClick={handleDelete}
-                  className="p-1.5 hover:bg-red-500/15 rounded-full transition-colors text-red-400/70 hover:text-red-400"
+                  className="p-1.5 hover:bg-red-500/15 rounded-full transition-colors text-red-400/60 hover:text-red-400"
                   title="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -345,6 +314,23 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
             </motion.div>
           )}
         </div>
+
+        {/* Reactions */}
+        {message.reactions?.length > 0 && (
+          <div className={`flex flex-wrap gap-1 mt-1.5 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+            {Object.entries(
+              message.reactions.reduce((acc, r) => { acc[r.emoji] = (acc[r.emoji] || 0) + 1; return acc; }, {})
+            ).map(([emoji, count]) => (
+              <button
+                key={emoji}
+                onClick={() => handleReact(emoji)}
+                className="text-[11px] px-1.5 py-0.5 bg-[#1c1d20] border border-white/8 rounded-full hover:border-accent/50 transition-colors"
+              >
+                {emoji}{count > 1 ? ` ${count}` : ''}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );

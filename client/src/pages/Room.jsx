@@ -17,7 +17,39 @@ import GamesPanel from '../components/GamesPanel';
 import EmojiPicker from '../components/EmojiPicker';
 import Avatar from '../components/Avatar';
 import VoiceChat from '../components/VoiceChat';
-import BackgroundSelector, { backgrounds } from '../components/BackgroundSelector';
+import BackgroundSelector, { backgrounds, getBgStyle } from '../components/BackgroundSelector';
+
+// ── Reusable header icon button ───────────────────────────────────────────────
+const HeaderIconBtn = ({
+  children, onClick, active, title,
+  activeColor = '#c46b4a',
+  activeBg = 'rgba(196,107,74,0.14)',
+}) => (
+  <button
+    onClick={onClick}
+    title={title}
+    className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
+    style={
+      active
+        ? { background: activeBg, color: activeColor, boxShadow: `0 0 10px ${activeBg}` }
+        : { color: 'rgba(255,255,255,0.38)' }
+    }
+    onMouseEnter={e => {
+      if (!active) {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
+        e.currentTarget.style.color = 'rgba(255,255,255,0.85)';
+      }
+    }}
+    onMouseLeave={e => {
+      if (!active) {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = 'rgba(255,255,255,0.38)';
+      }
+    }}
+  >
+    {children}
+  </button>
+);
 
 const Room = () => {
   const { roomId } = useParams();
@@ -592,54 +624,154 @@ const Room = () => {
     <div className="h-screen bg-background text-primary flex flex-col">
 
       {/* ── Header ─────────────────────────────────────────────────── */}
-      <header className="shrink-0 border-b border-white/[0.06] bg-surface/60 backdrop-blur-xl">
-        <div className="flex items-center gap-3 px-4 h-14">
+      <header
+        className="shrink-0 relative z-10"
+        style={{
+          background: 'rgba(17,14,18,0.88)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderBottom: '1px solid rgba(255,255,255,0.055)',
+          boxShadow: '0 1px 0 rgba(255,255,255,0.03), 0 4px 24px rgba(0,0,0,0.3)',
+        }}
+      >
+        {/* Animated accent glow strip at very top */}
+        <div
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, rgba(196,107,74,0.5) 40%, rgba(196,107,74,0.7) 50%, rgba(196,107,74,0.5) 60%, transparent 100%)',
+          }}
+        />
 
-          {/* Back + room identity */}
+        <div className="flex items-center gap-2.5 px-4 h-[58px]">
+
+          {/* Back */}
           <button
             onClick={() => navigate('/rooms')}
-            className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-white/6 transition-colors shrink-0"
+            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl transition-all"
+            style={{ color: 'rgba(255,255,255,0.4)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+            title="Back to rooms"
           >
-            <ArrowLeft className="w-4.5 h-4.5" />
+            <ArrowLeft className="w-[15px] h-[15px]" />
           </button>
 
-          <div className="w-8 h-8 rounded-xl bg-accent/20 text-accent flex items-center justify-center font-bold text-sm shrink-0">
-            {currentRoom?.name?.[0]?.toUpperCase()}
+          {/* Room identity */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {/* Room avatar with glow */}
+            <div className="relative shrink-0">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-[15px] select-none"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(196,107,74,0.35) 0%, rgba(196,107,74,0.15) 100%)',
+                  border: '1px solid rgba(196,107,74,0.3)',
+                  color: '#c46b4a',
+                  boxShadow: '0 0 14px rgba(196,107,74,0.2)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {currentRoom?.name?.[0]?.toUpperCase()}
+              </div>
+              {/* Online indicator */}
+              <div
+                className="absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full"
+                style={{
+                  background: '#4ade80',
+                  border: '2px solid rgba(17,14,18,1)',
+                  boxShadow: '0 0 6px rgba(74,222,128,0.6)',
+                }}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <h1
+                className="truncate leading-tight"
+                style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(247,241,234,0.92)', letterSpacing: '-0.015em' }}
+              >
+                {currentRoom?.name}
+              </h1>
+              <p style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.3)', lineHeight: 1, marginTop: '2px' }}>
+                {currentRoom?.members?.length || 0} members
+              </p>
+            </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <h1 className="text-[15px] font-semibold leading-tight truncate">{currentRoom?.name}</h1>
-            <p className="text-[11px] text-secondary/70 leading-tight">
-              {currentRoom?.members?.length || 0} members
-            </p>
-          </div>
-
-          {/* Action icons */}
+          {/* Icon buttons */}
           <div className="flex items-center gap-0.5 shrink-0">
-            <button onClick={() => navigate('/profile')} className="p-1.5 rounded-lg hover:bg-white/6 transition-colors" title="Profile">
+            {/* Profile avatar */}
+            <button
+              onClick={() => navigate('/profile')}
+              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              title="Profile"
+            >
               <Avatar user={user} size="xs" />
             </button>
-            <button onClick={() => setShowBackgroundSelector(true)} className="p-2 rounded-lg text-secondary hover:text-primary hover:bg-white/6 transition-colors" title="Background">
-              <Palette className="w-4 h-4" />
-            </button>
-            <button onClick={() => setShowGames(!showGames)} className={`p-2 rounded-lg transition-colors ${showGames ? 'text-accent bg-accent/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Games">
-              <Gamepad2 className="w-4 h-4" />
-            </button>
-            <button onClick={() => setShowVoiceChat(true)} className={`p-2 rounded-lg transition-colors ${showVoiceChat ? 'text-green-400 bg-green-400/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Voice Chat">
-              <Mic className="w-4 h-4" />
-            </button>
-            <button onClick={() => setShowMembers(!showMembers)} className={`p-2 rounded-lg transition-colors ${showMembers ? 'text-accent bg-accent/12' : 'text-secondary hover:text-primary hover:bg-white/6'}`} title="Members">
-              <Users className="w-4 h-4" />
+
+            {/* Theme */}
+            <HeaderIconBtn
+              onClick={() => setShowBackgroundSelector(true)}
+              title="Chat theme"
+              active={false}
+            >
+              <Palette className="w-[15px] h-[15px]" />
+            </HeaderIconBtn>
+
+            {/* Games */}
+            <HeaderIconBtn
+              onClick={() => setShowGames(!showGames)}
+              active={showGames}
+              title="Games"
+            >
+              <Gamepad2 className="w-[15px] h-[15px]" />
+            </HeaderIconBtn>
+
+            {/* Voice */}
+            <HeaderIconBtn
+              onClick={() => setShowVoiceChat(true)}
+              active={showVoiceChat}
+              activeColor="#4ade80"
+              activeBg="rgba(74,222,128,0.12)"
+              title="Voice chat"
+            >
+              <Mic className="w-[15px] h-[15px]" />
+            </HeaderIconBtn>
+
+            {/* Members */}
+            <HeaderIconBtn
+              onClick={() => setShowMembers(!showMembers)}
+              active={showMembers}
+              title="Members"
+            >
+              <Users className="w-[15px] h-[15px]" />
+            </HeaderIconBtn>
+
+            {/* Divider */}
+            <div className="w-px h-[18px] mx-1" style={{ background: 'rgba(255,255,255,0.08)' }} />
+
+            {/* Leave */}
+            <button
+              onClick={handleLeaveRoom}
+              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'rgba(239,68,68,0.9)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
+              title="Leave room"
+            >
+              <LogOut className="w-[15px] h-[15px]" />
             </button>
 
-            <div className="w-px h-5 bg-white/8 mx-1" />
-
-            <button onClick={handleLeaveRoom} className="p-2 rounded-lg text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Leave">
-              <LogOut className="w-4 h-4" />
-            </button>
             {isCreatorOrAdmin && (
-              <button onClick={handleDeleteRoom} className="p-2 rounded-lg text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Delete Room">
-                <Trash2 className="w-4 h-4" />
+              <button
+                onClick={handleDeleteRoom}
+                className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'rgba(239,68,68,0.9)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
+                title="Delete room"
+              >
+                <Trash2 className="w-[15px] h-[15px]" />
               </button>
             )}
           </div>
@@ -649,7 +781,7 @@ const Room = () => {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto">
-            <div className={`px-4 sm:px-6 py-5 space-y-3 min-h-full ${backgrounds.find(bg => bg.id === chatBackground)?.class || 'bg-background'}`}>
+            <div className="px-3 sm:px-5 py-4 space-y-2 min-h-full" style={getBgStyle(chatBackground)}>
             {messages.map((message) => (
               <Message
                 key={message._id}
