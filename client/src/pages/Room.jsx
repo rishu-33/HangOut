@@ -320,8 +320,9 @@ const Room = () => {
     // New message received
     socket.on('new-message', (message) => {
       setMessages(prev => {
-        // Ignore if already present (real or optimistic already replaced)
+        // Skip if already present (optimistic bubble was replaced, or duplicate)
         if (prev.some(m => String(m._id) === String(message._id))) return prev;
+        // Also skip any temp optimistic that matches by content+sender (edge case)
         return [...prev, message];
       });
     });
@@ -449,12 +450,10 @@ const Room = () => {
         ...(replyId ? { replyTo: replyId } : {})
       });
 
-      // Replace optimistic bubble with real server message
+      // Server now broadcasts new-message to all room members directly.
+      // Just replace the optimistic bubble with the confirmed message for the sender.
       setMessages(prev => prev.map(m => m._id === tempId ? data : m));
 
-      if (socket) {
-        socket.emit('send-message', { roomId, message: data });
-      }
     } catch (error) {
       // Remove failed optimistic bubble and restore input
       setMessages(prev => prev.filter(m => m._id !== tempId));
@@ -525,14 +524,13 @@ const Room = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      setMessages(prev => [...prev, data]);
+      // Server broadcasts the file message to everyone — just show it locally for sender
+      setMessages(prev => {
+        if (prev.some(m => String(m._id) === String(data._id))) return prev;
+        return [...prev, data];
+      });
 
-      const socket = getSocket();
-      if (socket) {
-        socket.emit('send-message', { roomId, message: data });
-      }
-
-      toast.success('File uploaded successfully');
+      toast.success('File uploaded');
     } catch (error) {
       console.error('Upload error:', error);
       toast.error(error.response?.data?.message || 'Failed to upload file. Please check Cloudinary configuration.');

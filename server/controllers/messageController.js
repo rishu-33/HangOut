@@ -94,6 +94,12 @@ export const sendMessage = async (req, res) => {
       });
     }
 
+    // Broadcast to ALL clients in the room immediately (server-side, no client relay)
+    const io = getIO();
+    if (io) {
+      io.in(roomId.toUpperCase()).emit('new-message', message);
+    }
+
     res.status(201).json(message);
   } catch (error) {
     console.error(error);
@@ -150,6 +156,12 @@ export const uploadFile = async (req, res) => {
     });
 
     await message.populate('sender', 'username email avatar status');
+
+    // Broadcast file message to room immediately
+    const io = getIO();
+    if (io) {
+      io.in(roomId.toUpperCase()).emit('new-message', message);
+    }
 
     res.status(201).json(message);
   } catch (error) {
