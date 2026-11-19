@@ -586,3 +586,189 @@ input[type=number] { -moz-appearance:textfield; }
 
 
 
+
+/* ============================================================
+   ENHANCED ROOM PAGE STYLES - MODERN & BEAUTIFUL
+   ============================================================ */
+
+/* Modern member cards */
+.member-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 6px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.member-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(100,200,255,0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.member-card:hover {
+  transform: translateX(4px);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(100,200,255,0.3);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(100,200,255,0.1);
+}
+
+.member-card:hover::before {
+  opacity: 1;
+}
+
+.member-card.online {
+  border-color: rgba(52,211,153,0.2);
+}
+
+.member-card.online:hover {
+  border-color: rgba(52,211,153,0.4);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3), 0 0 16px rgba(52,211,153,0.3);
+}
+
+/* Online pulse animation */
+.online-dot {
+  animation: onlinePulse 2s ease-in-out infinite;
+}
+
+@keyframes onlinePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.7); }
+  50% { box-shadow: 0 0 0 4px rgba(52,211,153,0); }
+}
+
+/* Message animations */
+.msg-enter {
+  animation: msgSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes msgSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Message bubble hover */
+.message-bubble {
+  transition: all 0.3s ease;
+}
+
+.message-bubble:hover {
+  transform: translateY(-1px);
+}
+
+/* Enhanced header icons */
+.header-icon-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.header-icon-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(100,200,255,0.1), rgba(150,100,255,0.1));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.header-icon-btn:hover::before {
+  opacity: 1;
+}
+
+/* Better composer input */
+.composer-input-wrap {
+  position: relative;
+}
+
+.composer-input-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 20px;
+  padding: 1.5px;
+  background: linear-gradient(135deg, rgba(100,200,255,0.3), rgba(150,100,255,0.3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.composer-input-wrap:focus-within::before {
+  opacity: 1;
+}
+
+/* Enhanced send button */
+.composer-send-btn {
+  background: linear-gradient(135deg, #6495ed 0%, #4169e1 100%);
+  box-shadow: 0 4px 16px rgba(100,149,237,0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.composer-send-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+  transform: scale(0);
+  transition: transform 0.4s ease;
+}
+
+.composer-send-btn:hover {
+  background: linear-gradient(135deg, #7ca5f0 0%, #5680e8 100%);
+  transform: scale(1.05) translateY(-2px);
+  box-shadow: 0 8px 24px rgba(100,149,237,0.5);
+}
+
+.composer-send-btn:hover::before {
+  transform: scale(1);
+}
+
+.composer-send-btn:active {
+  transform: scale(0.95);
+}
+
+/* Ambient background */
+.room-page {
+  position: relative;
+}
+
+.room-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 50%, rgba(100,150,255,0.05) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(255,100,200,0.03) 0%, transparent 50%);
+  animation: ambientPulse 8s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes ambientPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+.room-page > * {
+  position: relative;
+  z-index: 1;
+}
