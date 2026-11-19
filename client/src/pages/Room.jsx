@@ -615,7 +615,7 @@ const Room = () => {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.94, y: -4 }}
                     transition={{ duration: 0.12 }}
-                    className="absolute right-0 top-full mt-1.5 w-48 rounded-xl p-3 z-50 shadow-2xl"
+                    className="absolute right-0 top-full mt-1.5 w-48 rounded-xl p-3 z-[9999] shadow-2xl"
                     style={{ background: "#0a1e30", border: "1px solid rgba(255,255,255,0.09)" }}
                   >
                     <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "6px" }}>Room ID</p>
@@ -902,19 +902,23 @@ const Room = () => {
         <ConfirmModal
           title="Leave Room?"
           message={`Are you sure you want to leave "${currentRoom?.name}"?`}
-          confirmLabel="Leave"
+          confirmText="Leave"
+          isDanger={true}
+          isOpen={confirmLeave}
           onConfirm={doLeave}
           onClose={() => setConfirmLeave(false)}
         />
       )}
 
-      {showBgSelector && (
-        <BackgroundSelector
-          selectedId={chatBg}
-          onSelect={handleBgChange}
-          onClose={() => setShowBgSelector(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showBgSelector && (
+          <BackgroundSelector
+            currentBackground={chatBg}
+            onChange={handleBgChange}
+            onClose={() => setShowBgSelector(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {showEmojiPicker && (
         <Suspense fallback={null}>
@@ -933,3 +937,8 @@ const Room = () => {
 };
 
 export default Room;
+
+
+
+
+

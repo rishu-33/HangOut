@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from "react";
+﻿import { memo, useCallback, useRef, useState } from "react";
 import { Trash2, Smile, Download, FileText, Reply, Copy, Check } from "lucide-react";
 import { motion } from "framer-motion";
 import api, { getFileUrl } from "../utils/api";
@@ -6,8 +6,8 @@ import toast from "react-hot-toast";
 import Avatar from "./Avatar";
 import Lightbox from "./Lightbox";
 
-/* ── helpers ──────────────────────────────────────────────────────────── */
-const quickEmojis = ["❤️","👍","😂","😮","😢","🔥"];
+/* â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+const quickEmojis = ["â¤ï¸","ðŸ‘","ðŸ˜‚","ðŸ˜®","ðŸ˜¢","ðŸ”¥"];
 
 function smartTime(iso) {
   if (!iso) return "";
@@ -15,7 +15,7 @@ function smartTime(iso) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-/* ── Code Block ───────────────────────────────────────────────────────── */
+/* â”€â”€ Code Block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const CodeBlock = memo(({ code }) => {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
@@ -39,7 +39,7 @@ const CodeBlock = memo(({ code }) => {
   );
 });
 
-/* ── renderContent ────────────────────────────────────────────────────── */
+/* â”€â”€ renderContent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderContent(text, currentUsername) {
   if (!text) return null;
   const codeRe = /```([\s\S]*?)```/g;
@@ -74,7 +74,7 @@ function renderContent(text, currentUsername) {
   });
 }
 
-/* ── SYSTEM MESSAGE ───────────────────────────────────────────────────── */
+/* â”€â”€ SYSTEM MESSAGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const SystemMessage = memo(({ content }) => (
   <div className="flex justify-center py-1.5">
     <span
@@ -91,9 +91,9 @@ const SystemMessage = memo(({ content }) => (
   </div>
 ));
 
-/* ═══════════════════════════════════════════════════════════════════════
-   MAIN MESSAGE — reference image style
-   ═══════════════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   MAIN MESSAGE â€” reference image style
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const Message = ({
   message,
   currentUser,
@@ -147,9 +147,9 @@ const Message = ({
     a[r.emoji] = (a[r.emoji] || 0) + 1; return a;
   }, {});
 
-  /* ── Bubble styles (reference image) ── */
-  // Received: white/light-grey bg, dark text — like reference left side
-  // Sent: dark teal-toned, white text — like reference right side
+  /* â”€â”€ Bubble styles (reference image) â”€â”€ */
+  // Received: white/light-grey bg, dark text â€” like reference left side
+  // Sent: dark teal-toned, white text â€” like reference right side
   const bubbleStyle = isOwn
     ? {
         background: "linear-gradient(135deg, #1e3a4a 0%, #162c3a 100%)",
@@ -172,10 +172,9 @@ const Message = ({
   return (
     <div
       className={`flex items-end gap-2 group msg-enter ${isOwn ? "flex-row-reverse" : "flex-row"} ${message._optimistic ? "opacity-60" : ""}`}
-      onMouseEnter={revealActions}
-      onMouseLeave={scheduleHide}
+      
     >
-      {/* Avatar — 36px, only first in group */}
+      {/* Avatar â€” 36px, only first in group */}
       <div style={{ width: 36, height: 36, flexShrink: 0, marginBottom: 2 }}>
         {isFirst
           ? <Avatar user={message.sender} size="sm" />
@@ -191,7 +190,7 @@ const Message = ({
           maxWidth: "min(72%, 440px)",
         }}
       >
-        {/* Name + time — first in group only */}
+        {/* Name + time â€” first in group only */}
         {isFirst && (
           <div
             className="flex items-baseline gap-1.5 mb-1 px-0.5"
@@ -201,7 +200,7 @@ const Message = ({
               {message.sender?.username}
             </span>
             <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", lineHeight: 1, flexShrink: 0 }}>
-              {message._optimistic ? <span className="animate-pulse">sending…</span> : smartTime(message.createdAt)}
+              {message._optimistic ? <span className="animate-pulse">sendingâ€¦</span> : smartTime(message.createdAt)}
             </span>
           </div>
         )}
@@ -214,7 +213,7 @@ const Message = ({
         )}
 
         {/* Bubble */}
-        <div className="relative" style={{ maxWidth: "100%" }}>
+        <div className="relative" style={{ maxWidth: "100%" }} onMouseEnter={revealActions} onMouseLeave={scheduleHide}>
           <div
             style={{
               ...bubbleStyle,
@@ -236,9 +235,9 @@ const Message = ({
                   opacity: 0.75,
                 }}
               >
-                <span style={{ fontWeight: 600 }}>↩ {message.replyTo.sender?.username}</span>
+                <span style={{ fontWeight: 600 }}>â†© {message.replyTo.sender?.username}</span>
                 <span style={{ marginLeft: 6, opacity: 0.7 }}>
-                  {message.replyTo.content?.slice(0, 55)}{message.replyTo.content?.length > 55 ? "…" : ""}
+                  {message.replyTo.content?.slice(0, 55)}{message.replyTo.content?.length > 55 ? "â€¦" : ""}
                 </span>
               </div>
             )}
@@ -293,7 +292,7 @@ const Message = ({
                   letterSpacing: "0.01em",
                 }}
               >
-                {message._optimistic ? "…" : smartTime(message.createdAt)}
+                {message._optimistic ? "â€¦" : smartTime(message.createdAt)}
               </span>
             )}
           </div>
@@ -423,3 +422,4 @@ export default memo(Message, (prev, next) =>
   prev.currentUser?._id === next.currentUser?._id &&
   prev.isFirst === next.isFirst
 );
+
