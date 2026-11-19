@@ -481,36 +481,39 @@ const Room = () => {
           ) : (
             activeMembers.map(member => {
               const u = member.user;
+              const isOnline = u?.status === "online";
               return (
                 <div
                   key={member._id || u?._id}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors"
+                  className={`member-card ${isOnline ? "online" : ""}`}
                 >
                   <div className="relative shrink-0">
                     <Avatar user={u} size="md" />
-                    {u?.status === "online" && (
+                    {isOnline && (
                       <span
-                        className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 bg-green-400"
+                        className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 bg-green-400 online-dot"
                         style={{ borderColor: "#0a1e30" }}
                       />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p style={{ fontSize: "14px", fontWeight: 500, color: "rgba(255,255,255,0.88)", lineHeight: 1.3 }}>
-                      {u?.username}
-                    </p>
-                    <p style={{ fontSize: "11px", color: u?.status === "online" ? "rgba(52,211,153,0.7)" : "rgba(255,255,255,0.3)", lineHeight: 1.2, marginTop: "2px" }}>
-                      {u?.status === "online" ? "Active now" : "Offline"}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.92)", lineHeight: 1.3 }}>
+                        {u?.username}
+                      </p>
+                      {member.role === "admin" && (
+                        <span
+                          className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                          style={{ background: "rgba(100,180,255,0.15)", color: "#6495ed", border: "1px solid rgba(100,180,255,0.2)" }}
+                        >
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: "11px", color: isOnline ? "rgba(52,211,153,0.8)" : "rgba(255,255,255,0.35)", lineHeight: 1.2, marginTop: "3px", fontWeight: 500 }}>
+                      {isOnline ? "● Active now" : "○ Offline"}
                     </p>
                   </div>
-                  {member.role === "admin" && (
-                    <span
-                      className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                      style={{ background: "rgba(196,107,74,0.15)", color: "#c46b4a" }}
-                    >
-                      ADMIN
-                    </span>
-                  )}
                 </div>
               );
             })
@@ -953,6 +956,8 @@ const Room = () => {
 };
 
 export default Room;
+
+
 
 
 
