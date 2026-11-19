@@ -19,37 +19,28 @@ import Avatar from '../components/Avatar';
 import VoiceChat from '../components/VoiceChat';
 import BackgroundSelector, { backgrounds, getBgStyle } from '../components/BackgroundSelector';
 
-// ── Reusable header icon button ───────────────────────────────────────────────
-const HeaderIconBtn = ({
-  children, onClick, active, title,
-  activeColor = '#c46b4a',
-  activeBg = 'rgba(196,107,74,0.14)',
-}) => (
-  <button
-    onClick={onClick}
-    title={title}
-    className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
-    style={
-      active
-        ? { background: activeBg, color: activeColor, boxShadow: `0 0 10px ${activeBg}` }
-        : { color: 'rgba(255,255,255,0.38)' }
-    }
-    onMouseEnter={e => {
-      if (!active) {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-        e.currentTarget.style.color = 'rgba(255,255,255,0.85)';
-      }
-    }}
-    onMouseLeave={e => {
-      if (!active) {
-        e.currentTarget.style.background = 'transparent';
-        e.currentTarget.style.color = 'rgba(255,255,255,0.38)';
-      }
-    }}
-  >
-    {children}
-  </button>
-);
+const HeaderTool = ({ children, label, onClick, active, tone = 'clay' }) => {
+  const tones = {
+    clay: 'bg-accent text-white shadow-[0_8px_20px_rgba(196,107,74,0.35)]',
+    green: 'bg-emerald-500 text-white shadow-[0_8px_20px_rgba(16,185,129,0.35)]',
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-full text-[12px] font-medium transition-colors ${
+        active
+          ? tones[tone]
+          : 'text-secondary hover:text-primary hover:bg-white/8'
+      }`}
+    >
+      {children}
+      <span className="hidden md:inline">{label}</span>
+    </button>
+  );
+};
 
 const Room = () => {
   const { roomId } = useParams();
@@ -658,158 +649,72 @@ const Room = () => {
   return (
     <div className="h-screen bg-background text-primary flex flex-col">
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <header
-        className="shrink-0 relative z-10"
-        style={{
-          background: 'rgba(17,14,18,0.88)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          borderBottom: '1px solid rgba(255,255,255,0.055)',
-          boxShadow: '0 1px 0 rgba(255,255,255,0.03), 0 4px 24px rgba(0,0,0,0.3)',
-        }}
-      >
-        {/* Animated accent glow strip at very top */}
-        <div
-          className="absolute inset-x-0 top-0 h-px"
-          style={{
-            background: 'linear-gradient(90deg, transparent 0%, rgba(196,107,74,0.5) 40%, rgba(196,107,74,0.7) 50%, rgba(196,107,74,0.5) 60%, transparent 100%)',
-          }}
-        />
-
-        <div className="flex items-center gap-2.5 px-4 h-[58px]">
-
-          {/* Back */}
+      <header className="shrink-0 px-3 pt-3 sm:px-4">
+        <div className="flex items-center gap-3 rounded-[1.6rem] border border-white/10 bg-surface/80 backdrop-blur-xl px-3 py-2.5 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
           <button
             onClick={() => navigate('/rooms')}
-            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl transition-all"
-            style={{ color: 'rgba(255,255,255,0.4)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+            className="shrink-0 flex items-center justify-center w-10 h-10 rounded-2xl bg-white/5 text-secondary hover:text-primary hover:bg-white/10"
             title="Back to rooms"
           >
-            <ArrowLeft className="w-[15px] h-[15px]" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
 
-          {/* Room identity */}
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            {/* Room avatar with glow */}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="relative shrink-0">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-[15px] select-none"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(196,107,74,0.35) 0%, rgba(196,107,74,0.15) 100%)',
-                  border: '1px solid rgba(196,107,74,0.3)',
-                  color: '#c46b4a',
-                  boxShadow: '0 0 14px rgba(196,107,74,0.2)',
-                  letterSpacing: '-0.02em',
-                }}
-              >
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-accent to-[#8d3d28] text-white font-display text-xl flex items-center justify-center shadow-[0_10px_24px_rgba(196,107,74,0.35)]">
                 {currentRoom?.name?.[0]?.toUpperCase()}
               </div>
-              {/* Online indicator */}
-              <div
-                className="absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full"
-                style={{
-                  background: '#4ade80',
-                  border: '2px solid rgba(17,14,18,1)',
-                  boxShadow: '0 0 6px rgba(74,222,128,0.6)',
-                }}
-              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-surface" />
             </div>
-
             <div className="min-w-0">
-              <h1
-                className="truncate leading-tight"
-                style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(247,241,234,0.92)', letterSpacing: '-0.015em' }}
-              >
-                {currentRoom?.name}
-              </h1>
-              <p style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.3)', lineHeight: 1, marginTop: '2px' }}>
-                {currentRoom?.members?.length || 0} members
+              <p className="text-[10px] uppercase tracking-[0.22em] text-secondary">Room</p>
+              <h1 className="font-display text-[1.35rem] leading-none truncate">{currentRoom?.name}</h1>
+              <p className="text-[11px] text-secondary mt-1">
+                {currentRoom?.members?.length || 0} people here
               </p>
             </div>
           </div>
 
-          {/* Icon buttons */}
-          <div className="flex items-center gap-0.5 shrink-0">
-            {/* Profile avatar */}
-            <button
-              onClick={() => navigate('/profile')}
-              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-              title="Profile"
-            >
-              <Avatar user={user} size="xs" />
-            </button>
-
-            {/* Theme */}
-            <HeaderIconBtn
-              onClick={() => setShowBackgroundSelector(true)}
-              title="Chat theme"
-              active={false}
-            >
-              <Palette className="w-[15px] h-[15px]" />
-            </HeaderIconBtn>
-
-            {/* Games */}
-            <HeaderIconBtn
-              onClick={() => setShowGames(!showGames)}
-              active={showGames}
-              title="Games"
-            >
-              <Gamepad2 className="w-[15px] h-[15px]" />
-            </HeaderIconBtn>
-
-            {/* Voice */}
-            <HeaderIconBtn
-              onClick={() => setShowVoiceChat(true)}
-              active={showVoiceChat}
-              activeColor="#4ade80"
-              activeBg="rgba(74,222,128,0.12)"
-              title="Voice chat"
-            >
-              <Mic className="w-[15px] h-[15px]" />
-            </HeaderIconBtn>
-
-            {/* Members */}
-            <HeaderIconBtn
-              onClick={() => setShowMembers(!showMembers)}
-              active={showMembers}
-              title="Members"
-            >
-              <Users className="w-[15px] h-[15px]" />
-            </HeaderIconBtn>
-
-            {/* Divider */}
-            <div className="w-px h-[18px] mx-1" style={{ background: 'rgba(255,255,255,0.08)' }} />
-
-            {/* Leave */}
-            <button
-              onClick={handleLeaveRoom}
-              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
-              style={{ color: 'rgba(255,255,255,0.35)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'rgba(239,68,68,0.9)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
-              title="Leave room"
-            >
-              <LogOut className="w-[15px] h-[15px]" />
-            </button>
-
-            {isCreatorOrAdmin && (
-              <button
-                onClick={handleDeleteRoom}
-                className="flex items-center justify-center w-8 h-8 rounded-xl transition-all"
-                style={{ color: 'rgba(255,255,255,0.35)' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = 'rgba(239,68,68,0.9)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
-                title="Delete room"
-              >
-                <Trash2 className="w-[15px] h-[15px]" />
-              </button>
-            )}
+          <div className="flex items-center gap-1 rounded-full bg-black/25 border border-white/8 p-1">
+            <HeaderTool label="Theme" onClick={() => setShowBackgroundSelector(true)}>
+              <Palette className="w-4 h-4" />
+            </HeaderTool>
+            <HeaderTool label="Games" onClick={() => setShowGames(!showGames)} active={showGames}>
+              <Gamepad2 className="w-4 h-4" />
+            </HeaderTool>
+            <HeaderTool label="Voice" onClick={() => setShowVoiceChat(true)} active={showVoiceChat} tone="green">
+              <Mic className="w-4 h-4" />
+            </HeaderTool>
+            <HeaderTool label="People" onClick={() => setShowMembers(!showMembers)} active={showMembers}>
+              <Users className="w-4 h-4" />
+            </HeaderTool>
           </div>
+
+          <button
+            onClick={() => navigate('/profile')}
+            className="hidden sm:flex items-center gap-2 h-10 pl-1 pr-3 rounded-full bg-white/5 hover:bg-white/10"
+            title="Your profile"
+          >
+            <Avatar user={user} size="sm" />
+            <span className="text-sm font-medium max-w-[88px] truncate">{user?.username}</span>
+          </button>
+
+          <button
+            onClick={handleLeaveRoom}
+            className="shrink-0 flex items-center justify-center w-10 h-10 rounded-2xl text-red-300 hover:bg-red-500/15"
+            title="Leave room"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+          {isCreatorOrAdmin && (
+            <button
+              onClick={handleDeleteRoom}
+              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-2xl text-red-300 hover:bg-red-500/15"
+              title="Delete room"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </header>
 
