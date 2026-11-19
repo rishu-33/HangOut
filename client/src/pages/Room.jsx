@@ -861,14 +861,28 @@ const Room = () => {
                     rows={1}
                     className="composer-input"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowEmojiPicker(v => !v)}
-                    className="composer-emoji-btn"
-                    title="Emoji"
-                  >
-                    <Smile className="w-5 h-5" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(v => !v)}
+                      className="composer-emoji-btn"
+                      title="Emoji"
+                    >
+                      <Smile className="w-5 h-5" />
+                    </button>
+                    {showEmojiPicker && (
+                      <Suspense fallback={null}>
+                        <EmojiPicker
+                          onSelect={emoji => {
+                            setNewMessage(m => m + emoji);
+                            setShowEmojiPicker(false);
+                            textareaRef.current?.focus();
+                          }}
+                          onClose={() => setShowEmojiPicker(false)}
+                        />
+                      </Suspense>
+                    )}
+                  </div>
                 </form>
 
                 {/* Send */}
@@ -919,24 +933,14 @@ const Room = () => {
           />
         )}
       </AnimatePresence>
-
-      {showEmojiPicker && (
-        <Suspense fallback={null}>
-          <EmojiPicker
-            onEmojiSelect={emoji => {
-              setNewMessage(m => m + emoji);
-              setShowEmojiPicker(false);
-              textareaRef.current?.focus();
-            }}
-            onClose={() => setShowEmojiPicker(false)}
-          />
-        </Suspense>
-      )}
     </div>
   );
 };
 
 export default Room;
+
+
+
 
 
 
