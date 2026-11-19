@@ -102,7 +102,18 @@ const Room = () => {
           api.get(`/messages/${roomId}`),
         ]);
         if (cancelled) return;
-        setCurrentRoom(roomData);
+        // Set current user as online immediately
+        const updatedRoom = {
+          ...roomData,
+          members: roomData.members?.map(m => ({
+            ...m,
+            user: {
+              ...m.user,
+              status: String(m.user?._id || m.user) === String(user?._id) ? "online" : (m.user?.status || "offline")
+            }
+          }))
+        };
+        setCurrentRoom(updatedRoom);
         setMessages(msgsData.messages);
       } catch {
         if (cancelled) return;
@@ -400,7 +411,7 @@ const Room = () => {
 
   /* ── active members only ── */
   const activeMembers = useMemo(() =>
-    sortedMembers.filter(m => m.user?.status === "online"),
+    sortedMembers, // Show all members, we'll style online ones differently
     [sortedMembers]
   );
 
@@ -456,7 +467,7 @@ const Room = () => {
         <div className="sidebar-header">
           <div className="flex items-center gap-2">
             <span style={{ fontSize: "16px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "-0.02em" }}>
-              Active Members
+              Members
             </span>
           </div>
         </div>
@@ -477,17 +488,19 @@ const Room = () => {
                 >
                   <div className="relative shrink-0">
                     <Avatar user={u} size="md" />
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 bg-green-400"
-                      style={{ borderColor: "#0a1e30" }}
-                    />
+                    {u?.status === "online" && (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 bg-green-400"
+                        style={{ borderColor: "#0a1e30" }}
+                      />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p style={{ fontSize: "14px", fontWeight: 500, color: "rgba(255,255,255,0.88)", lineHeight: 1.3 }}>
                       {u?.username}
                     </p>
-                    <p style={{ fontSize: "11px", color: "rgba(52,211,153,0.7)", lineHeight: 1.2, marginTop: "2px" }}>
-                      Active now
+                    <p style={{ fontSize: "11px", color: u?.status === "online" ? "rgba(52,211,153,0.7)" : "rgba(255,255,255,0.3)", lineHeight: 1.2, marginTop: "2px" }}>
+                      {u?.status === "online" ? "Active now" : "Offline"}
                     </p>
                   </div>
                   {member.role === "admin" && (
@@ -940,6 +953,10 @@ const Room = () => {
 };
 
 export default Room;
+
+
+
+
 
 
 
