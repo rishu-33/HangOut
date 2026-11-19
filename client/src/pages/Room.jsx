@@ -1,947 +1,834 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ArrowLeft, Send, Paperclip, Smile, Users, 
-  LogOut, Gamepad2, Mic, Trash2, Phone, Palette, X, Reply
-} from 'lucide-react';
-import useAuthStore from '../store/authStore';
-import useRoomStore from '../store/roomStore';
-import { getSocket } from '../utils/socket';
-import api from '../utils/api';
-import toast from 'react-hot-toast';
-import { formatDistanceToNow } from 'date-fns';
-import Message from '../components/Message';
-import MembersSidebar from '../components/MembersSidebar';
-import GamesPanel from '../components/GamesPanel';
-import EmojiPicker from '../components/EmojiPicker';
-import Avatar from '../components/Avatar';
-import VoiceChat from '../components/VoiceChat';
-import BackgroundSelector, { backgrounds, getBgStyle } from '../components/BackgroundSelector';
+﻿import {
+  useEffect, useState, useRef, useCallback, useMemo, lazy, Suspense
+} from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowLeft, Send, Paperclip, Smile, Users,
+  LogOut, Gamepad2, Mic, Trash2, Phone, Palette, X, Reply,
+  ChevronDown, Wifi, WifiOff, MoreVertical
+} from "lucide-react";
+import { Virtuoso } from "react-virtuoso";
+import useAuthStore from "../store/authStore";
+import useRoomStore from "../store/roomStore";
+import { getSocket } from "../utils/socket";
+import api from "../utils/api";
+import toast from "react-hot-toast";
+import Message from "../components/Message";
+import MembersSidebar from "../components/MembersSidebar";
+import Avatar from "../components/Avatar";
+import ConfirmModal from "../components/ConfirmModal";
+import BackgroundSelector, { getBgStyle } from "../components/BackgroundSelector";
 
-const HeaderTool = ({ children, label, onClick, active, tone = 'clay' }) => {
-  const tones = {
-    clay: 'bg-accent text-white shadow-[0_8px_20px_rgba(196,107,74,0.35)]',
-    green: 'bg-emerald-500 text-white shadow-[0_8px_20px_rgba(16,185,129,0.35)]',
-  };
+/* Code-split heavy panels */
+const GamesPanel   = lazy(() => import("../components/GamesPanel"));
+const VoiceChat    = lazy(() => import("../components/VoiceChat"));
+const EmojiPicker  = lazy(() => import("../components/EmojiPicker"));
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-full text-[12px] font-medium transition-colors ${
-        active
-          ? tones[tone]
-          : 'text-secondary hover:text-primary hover:bg-white/8'
-      }`}
-    >
-      {children}
-      <span className="hidden md:inline">{label}</span>
-    </button>
-  );
-};
+/* ── Skeleton ─────────────────────────────────────────────────────────── */
+const MessageSkeleton = () => (
+  <div className="flex items-end gap-2 px-4">
+    <div className="skeleton w-8 h-8 rounded-full shrink-0" />
+    <div className="flex flex-col gap-1.5 flex-1 max-w-xs">
+      <div className="skeleton h-3 w-24 rounded" />
+      <div className="skeleton h-10 w-48 rounded-2xl" />
+    </div>
+  </div>
+);
 
+/* ── Day divider ──────────────────────────────────────────────────────── */
+function dayLabel(iso) {
+  const d   = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return "Today";
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday:"long", month:"short", day:"numeric" });
+}
+
+/* ── Pill nav button ──────────────────────────────────────────────────── */
+const NavBtn = ({ icon: Icon, label, onClick, active, tone = "default" }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={label}
+    aria-label={label}
+    aria-pressed={active}
+    className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-full text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+      active
+        ? tone === "green"
+          ? "bg-emerald-500 text-white shadow-[0_6px_18px_rgba(52,211,153,0.3)]"
+          : "bg-accent text-white shadow-[0_6px_18px_rgba(196,107,74,0.3)]"
+        : "text-white/50 hover:text-white/90 hover:bg-white/8"
+    }`}
+  >
+    <Icon className="w-4 h-4" />
+    <span className="hidden lg:inline">{label}</span>
+  </button>
+);
+
+/* ── Room page ────────────────────────────────────────────────────────── */
 const Room = () => {
   const { roomId } = useParams();
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const {
-    currentRoom,
-    setCurrentRoom,
-    leaveRoom,
-    removeRoomLocally,
-    updateRoomMembers
-  } = useRoomStore();
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [typingUsers, setTypingUsers] = useState(new Set());
-  const [showMembers, setShowMembers] = useState(false);
-  const [showGames, setShowGames] = useState(false);
-  const [showVoiceChat, setShowVoiceChat] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showBackgroundSelector, setShowBackgroundSelector] = useState(false);
-  const [chatBackground, setChatBackground] = useState(() => {
-    // Load saved background from localStorage
-    return localStorage.getItem(`room-bg-${roomId}`) || 'default';
-  });
-  const [uploading, setUploading] = useState(false);
-  const [voiceCallCard, setVoiceCallCard] = useState(null); // { username, participantCount, active }
-  const [replyTo, setReplyTo] = useState(null); // message being replied to
-  const [mentionQuery, setMentionQuery] = useState(''); // current @query
-  const [showMentions, setShowMentions] = useState(false);
-  const textareaRef = useRef(null);
-  const messagesEndRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const navigate   = useNavigate();
+  const { user }   = useAuthStore();
+  const { currentRoom, setCurrentRoom, leaveRoom, removeRoomLocally, updateRoomMembers } = useRoomStore();
 
+  /* ── state ── */
+  const [messages,       setMessages]       = useState([]);
+  const [newMessage,     setNewMessage]     = useState("");
+  const [loading,        setLoading]        = useState(true);
+  const [socketOk,       setSocketOk]       = useState(true);
+  const [typingUsers,    setTypingUsers]     = useState(new Set());
+  const [showMembers,    setShowMembers]     = useState(false);
+  const [showGames,      setShowGames]       = useState(false);
+  const [showVoiceChat,  setShowVoiceChat]   = useState(false);
+  const [showEmojiPicker,setShowEmojiPicker] = useState(false);
+  const [showBgSelector, setShowBgSelector]  = useState(false);
+  const [showSettings,   setShowSettings]    = useState(false);
+  const [confirmLeave,   setConfirmLeave]    = useState(false);
+  const [confirmDelete,  setConfirmDelete]   = useState(false);
+  const [chatBg,         setChatBg]          = useState(() =>
+    localStorage.getItem(`room-bg-${roomId}`) || "default"
+  );
+  const [uploading,      setUploading]      = useState(false);
+  const [replyTo,        setReplyTo]        = useState(null);
+  const [mentionQuery,   setMentionQuery]   = useState("");
+  const [showMentions,   setShowMentions]   = useState(false);
+  const [voiceCallCard,  setVoiceCallCard]  = useState(null);
+  const [atBottom,       setAtBottom]       = useState(true);
+
+  /* ── refs ── */
+  const virtuosoRef      = useRef(null);
+  const textareaRef      = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const fileInputRef     = useRef(null);
+
+  /* ── load room + messages ── */
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setMessages([]);
-
-    const loadRoomData = async () => {
+    (async () => {
       try {
-        const { data: roomData } = await api.get(`/rooms/${roomId}`);
+        const [{ data: roomData }, { data: msgsData }] = await Promise.all([
+          api.get(`/rooms/${roomId}`),
+          api.get(`/messages/${roomId}`),
+        ]);
         if (cancelled) return;
         setCurrentRoom(roomData);
-
-        const { data: messagesData } = await api.get(`/messages/${roomId}`);
+        setMessages(msgsData.messages);
+      } catch {
         if (cancelled) return;
-        setMessages(messagesData.messages);
-      } catch (error) {
-        if (cancelled) return;
-        toast.error('Failed to load room');
-        navigate('/rooms');
+        toast.error("Failed to load room");
+        navigate("/rooms");
       } finally {
         if (!cancelled) setLoading(false);
       }
-    };
-
-    loadRoomData();
-    return () => {
-      cancelled = true;
-    };
+    })();
+    return () => { cancelled = true; };
   }, [roomId, setCurrentRoom, navigate]);
 
+  /* ── socket ── */
   useEffect(() => {
     const socket = getSocket();
-    const code = roomId?.toUpperCase();
-    if (!socket || !code) {
-      console.warn('⚠️ Socket not available');
-      return;
-    }
+    const code   = roomId?.toUpperCase();
+    if (!socket || !code) return;
 
     const join = () => {
-      socket.emit('join-room', code);
+      socket.emit("join-room", code);
+      setSocketOk(true);
     };
+    const onDisconnect = () => setSocketOk(false);
+    const onReconnect  = () => { setSocketOk(true); join(); };
 
-    const onProfileUpdated = ({ userId, username, avatar }) => {
-      const patchSender = (sender) => {
-        if (!sender || String(sender._id) !== String(userId)) return sender;
-        return { ...sender, username, avatar };
-      };
-
-      setMessages(prev => prev.map(msg => ({
-        ...msg,
-        sender: patchSender(msg.sender),
-        replyTo: msg.replyTo
-          ? { ...msg.replyTo, sender: patchSender(msg.replyTo.sender) }
-          : msg.replyTo
-      })));
-    };
-
-    setupSocketListeners(socket);
-    socket.on('profile-updated', onProfileUpdated);
-    socket.on('connect', join);
-    if (socket.connected) join();
-
-    // Game invite listener — works even when GamesPanel is closed
-    const onGameInvite = ({ game, inviter, gameType }) => {
-      toast(
-        (t) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>🎮</span>
-              <span style={{ fontWeight: 600 }}>{inviter.username}</span>
-              <span style={{ fontSize: '14px' }}>started a game!</span>
-            </div>
-            <p style={{ fontSize: '14px', color: '#9ca3af', margin: 0 }}>
-              Join a game of <strong style={{ color: '#e5e7eb' }}>{gameType}</strong>
-            </p>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-              <button
-                onClick={() => {
-                  setShowGames(true);
-                  toast.dismiss(t.id);
-                }}
-                style={{
-                  padding: '6px 12px',
-                  background: '#3b82f6',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Open Games
-              </button>
-              <button
-                onClick={() => toast.dismiss(t.id)}
-                style={{
-                  padding: '6px 12px',
-                  background: '#374151',
-                  color: '#fff',
-                  fontSize: '13px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        ),
-        {
-          duration: 15000,
-          style: {
-            background: '#1a1b1e',
-            color: '#fff',
-            border: '1px solid #2a2b2e',
-            padding: '16px',
-            maxWidth: '360px'
-          }
-        }
-      );
-    };
-
-    const onRoomDeleted = ({ roomId: deletedRoomId, deletedBy }) => {
-      if (deletedRoomId?.toUpperCase() === code) {
-        toast.error(`This room was deleted by ${deletedBy || 'the admin'}`);
-        navigate('/rooms');
-      }
-    };
-
-    const onRoomAccessRevoked = ({ roomId: revokedRoomId }) => {
-      if (revokedRoomId?.toUpperCase() === code) {
-        removeRoomLocally(code);
-        toast.error('You were removed from this room');
-        navigate('/rooms');
-      }
-    };
-
-    socket.on('game-invite', onGameInvite);
-    socket.on('room-deleted', onRoomDeleted);
-    socket.on('room-access-revoked', onRoomAccessRevoked);
-
-    // ── Online status: patch member statuses from the live socket room list ──
-    const onRoomUsers = (onlineUserIds) => {
+    /* helpers */
+    const patchPresence = (userId, status) => {
       const room = useRoomStore.getState().currentRoom;
       if (!room?.members) return;
-
-      const onlineSet = new Set(onlineUserIds.map(String));
-      const members = room.members.map((member) => {
-        const id = String(member.user?._id || member.user);
-        const status = onlineSet.has(id) ? 'online' : 'offline';
-        return { ...member, user: { ...member.user, status } };
-      });
-
-      updateRoomMembers(room.roomId, members);
+      updateRoomMembers(room.roomId, room.members.map(m => {
+        const id = String(m.user?._id || m.user);
+        return id === String(userId) ? { ...m, user: { ...m.user, status } } : m;
+      }));
     };
 
-    socket.on('room-users', onRoomUsers);
-
-    // ── Voice call notifications (WhatsApp-style) ──
-    const onVoiceCallStarted = ({ userId, username, participantCount }) => {
-      // Don't show card for yourself
-      if (String(userId) === String(user?._id)) return;
-
-      setVoiceCallCard({ username, participantCount: participantCount || 1, active: true });
-
-      // Also show a toast notification
-      toast(
-        (t) => (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>📞</span>
-              <span style={{ fontWeight: 600 }}>{username}</span>
-              <span style={{ fontSize: '14px' }}>started a voice call</span>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-              <button
-                onClick={() => {
-                  setShowVoiceChat(true);
-                  toast.dismiss(t.id);
-                }}
-                style={{
-                  padding: '6px 12px',
-                  background: '#22c55e',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Join Voice Chat
-              </button>
-              <button
-                onClick={() => toast.dismiss(t.id)}
-                style={{
-                  padding: '6px 12px',
-                  background: '#374151',
-                  color: '#fff',
-                  fontSize: '13px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        ),
-        {
-          duration: 30000,
-          style: {
-            background: '#1a1b1e',
-            color: '#fff',
-            border: '1px solid #22c55e40',
-            padding: '16px',
-            maxWidth: '360px'
-          }
-        }
+    /* listeners */
+    const onNewMessage = (msg) => setMessages(prev => {
+      if (prev.some(m => String(m._id) === String(msg._id))) return prev;
+      const idx = prev.findIndex(m =>
+        m._optimistic &&
+        String(m.sender?._id || m.sender) === String(msg.sender?._id || msg.sender) &&
+        (m.type === "text" ? m.content === msg.content : m.type === msg.type)
       );
-    };
+      if (idx === -1) return [...prev, msg];
+      const next = [...prev]; next[idx] = msg; return next;
+    });
 
-    const onVoiceCallUpdate = ({ participantCount }) => {
-      setVoiceCallCard((prev) => prev ? { ...prev, participantCount } : prev);
+    const onUserJoined = async ({ userId, username }) => {
+      toast(`${username} joined`, { icon: "👋" });
+      const room = useRoomStore.getState().currentRoom;
+      if (!room?.members?.some(m => String(m.user?._id || m.user) === String(userId))) {
+        try { const { data } = await api.get(`/rooms/${roomId}`); setCurrentRoom(data); } catch {}
+      } else { patchPresence(userId, "online"); }
     };
-
-    const onVoiceCallEnded = () => {
-      setVoiceCallCard((prev) => prev ? { ...prev, active: false } : null);
+    const onUserLeft    = ({ userId, username }) => { toast(`${username} left`, { icon: "👋" }); patchPresence(userId, "offline"); };
+    const onTypingStart = ({ username })          => setTypingUsers(p => { const s = new Set(p); s.add(username);    return s; });
+    const onTypingStop  = ({ username })          => setTypingUsers(p => { const s = new Set(p); s.delete(username); return s; });
+    const onDeleted     = ({ messageId })         => setMessages(p => p.filter(m => String(m._id) !== String(messageId)));
+    const onReaction    = ({ messageId, reactions }) => setMessages(p => p.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
+    const onRoomUsers   = (ids) => {
+      const room = useRoomStore.getState().currentRoom;
+      if (!room?.members) return;
+      const set = new Set(ids.map(String));
+      updateRoomMembers(room.roomId, room.members.map(m => ({
+        ...m, user: { ...m.user, status: set.has(String(m.user?._id || m.user)) ? "online" : "offline" }
+      })));
     };
+    const onProfileUpdated = ({ userId, username, avatar }) => {
+      const patch = s => s && String(s._id) === String(userId) ? { ...s, username, avatar } : s;
+      setMessages(p => p.map(m => ({ ...m, sender: patch(m.sender), replyTo: m.replyTo ? { ...m.replyTo, sender: patch(m.replyTo.sender) } : m.replyTo })));
+    };
+    const onRoomDeleted = ({ roomId: rid, deletedBy }) => {
+      if (rid?.toUpperCase() === code) { toast.error(`Room deleted by ${deletedBy || "admin"}`); navigate("/rooms"); }
+    };
+    const onRoomRevoked = ({ roomId: rid }) => {
+      if (rid?.toUpperCase() === code) { removeRoomLocally(code); toast.error("You were removed"); navigate("/rooms"); }
+    };
+    const onGameInvite = ({ game, inviter, gameType }) => {
+      setGames && null; // panels handle internally
+      toast(t => (
+        <div className="flex flex-col gap-2">
+          <p className="font-semibold">🎮 {inviter.username} started <strong>{gameType}</strong></p>
+          <div className="flex gap-2">
+            <button onClick={() => { setShowGames(true); toast.dismiss(t.id); }}
+              className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg">Open Games</button>
+            <button onClick={() => toast.dismiss(t.id)}
+              className="px-3 py-1.5 bg-white/10 text-white text-xs rounded-lg">Dismiss</button>
+          </div>
+        </div>
+      ), { duration: 15000, style: { background: "#1a2235", color: "#fff", border: "1px solid rgba(255,255,255,0.1)", maxWidth: 340 } });
+    };
+    const onVoiceStarted = ({ userId, username, participantCount }) => {
+      if (String(userId) === String(user?._id)) return;
+      setVoiceCallCard({ username, participantCount: participantCount || 1, active: true });
+    };
+    const onVoiceUpdate = ({ participantCount }) => setVoiceCallCard(p => p ? { ...p, participantCount } : p);
+    const onVoiceEnded  = ()                      => setVoiceCallCard(p => p ? { ...p, active: false } : null);
 
-    socket.on('voice-call-started', onVoiceCallStarted);
-    socket.on('voice-call-update', onVoiceCallUpdate);
-    socket.on('voice-call-ended', onVoiceCallEnded);
+    socket.on("connect",             join);
+    socket.on("disconnect",          onDisconnect);
+    socket.on("reconnect",           onReconnect);
+    socket.on("new-message",         onNewMessage);
+    socket.on("user-joined",         onUserJoined);
+    socket.on("user-left",           onUserLeft);
+    socket.on("user-typing",         onTypingStart);
+    socket.on("user-stop-typing",    onTypingStop);
+    socket.on("message-deleted",     onDeleted);
+    socket.on("reaction-added",      onReaction);
+    socket.on("room-users",          onRoomUsers);
+    socket.on("profile-updated",     onProfileUpdated);
+    socket.on("room-deleted",        onRoomDeleted);
+    socket.on("room-access-revoked", onRoomRevoked);
+    socket.on("game-invite",         onGameInvite);
+    socket.on("voice-call-started",  onVoiceStarted);
+    socket.on("voice-call-update",   onVoiceUpdate);
+    socket.on("voice-call-ended",    onVoiceEnded);
+    if (socket.connected) join();
 
     return () => {
-      socket.off('connect', join);
-      socket.off('profile-updated', onProfileUpdated);
-      socket.off('game-invite', onGameInvite);
-      socket.off('room-deleted', onRoomDeleted);
-      socket.off('room-access-revoked', onRoomAccessRevoked);
-      socket.off('room-users', onRoomUsers);
-      socket.off('voice-call-started', onVoiceCallStarted);
-      socket.off('voice-call-update', onVoiceCallUpdate);
-      socket.off('voice-call-ended', onVoiceCallEnded);
-      socket.emit('leave-room', code);
-      socket.off('new-message');
-      socket.off('user-joined');
-      socket.off('user-left');
-      socket.off('user-typing');
-      socket.off('user-stop-typing');
-      socket.off('message-deleted');
-      socket.off('reaction-added');
+      socket.off("connect",             join);
+      socket.off("disconnect",          onDisconnect);
+      socket.off("reconnect",           onReconnect);
+      socket.off("new-message",         onNewMessage);
+      socket.off("user-joined",         onUserJoined);
+      socket.off("user-left",           onUserLeft);
+      socket.off("user-typing",         onTypingStart);
+      socket.off("user-stop-typing",    onTypingStop);
+      socket.off("message-deleted",     onDeleted);
+      socket.off("reaction-added",      onReaction);
+      socket.off("room-users",          onRoomUsers);
+      socket.off("profile-updated",     onProfileUpdated);
+      socket.off("room-deleted",        onRoomDeleted);
+      socket.off("room-access-revoked", onRoomRevoked);
+      socket.off("game-invite",         onGameInvite);
+      socket.off("voice-call-started",  onVoiceStarted);
+      socket.off("voice-call-update",   onVoiceUpdate);
+      socket.off("voice-call-ended",    onVoiceEnded);
+      socket.emit("leave-room", code);
     };
   }, [roomId]);
 
-  useEffect(() => {
-    scrollToBottom();
+  /* ── derived: grouped messages with day-dividers ── */
+  const rows = useMemo(() => {
+    const out = [];
+    let lastDate = "";
+    let lastSender = "";
+    for (const msg of messages) {
+      /* day divider */
+      const dateKey = msg.createdAt ? new Date(msg.createdAt).toDateString() : "";
+      if (dateKey && dateKey !== lastDate) {
+        out.push({ type: "day", id: `day-${dateKey}`, label: dayLabel(msg.createdAt) });
+        lastDate   = dateKey;
+        lastSender = "";           /* reset grouping after divider */
+      }
+      /* message */
+      const senderId = String(msg.sender?._id || msg.sender || "");
+      const isFirst  = senderId !== lastSender;
+      out.push({ type: "msg", id: msg._id, msg, isFirst });
+      if (msg.type !== "system") lastSender = senderId;
+    }
+    return out;
   }, [messages]);
 
-  const setupSocketListeners = (socket) => {
-    if (!socket) return;
+  /* callbacks to avoid re-renders in Message */
+  const handleReaction = useCallback((id, reactions) =>
+    setMessages(p => p.map(m => String(m._id) === String(id) ? { ...m, reactions } : m)), []);
+  const handleDeleted  = useCallback((id) =>
+    setMessages(p => p.filter(m => String(m._id) !== String(id))), []);
+  const handleReply    = useCallback((msg) => {
+    setReplyTo(msg); textareaRef.current?.focus();
+  }, []);
 
-    // New message received
-    socket.on('new-message', (message) => {
-      setMessages(prev => {
-        if (prev.some(m => String(m._id) === String(message._id))) return prev;
-
-        const senderId = message.sender?._id || message.sender;
-        const tempIndex = prev.findIndex((m) => {
-          if (!m._optimistic) return false;
-          if (String(m.sender?._id || m.sender) !== String(senderId)) return false;
-          if (m.type === 'text' || !m.type) return m.content === message.content;
-          return m.type === message.type;
-        });
-        if (tempIndex === -1) return [...prev, message];
-
-        const next = prev.slice();
-        next[tempIndex] = message;
-        return next;
-      });
-    });
-
-    const setPresence = (userId, status) => {
-      const room = useRoomStore.getState().currentRoom;
-      if (!room?.members) return;
-
-      const members = room.members.map((member) => {
-        const id = member.user?._id || member.user;
-        if (String(id) !== String(userId)) return member;
-        return { ...member, user: { ...member.user, status } };
-      });
-
-      updateRoomMembers(room.roomId, members);
-    };
-
-    socket.on('user-joined', async ({ userId, username }) => {
-      toast(`${username} joined the room`, { icon: '👋' });
-
-      const room = useRoomStore.getState().currentRoom;
-      const alreadyMember = room?.members?.some(
-        (member) => String(member.user?._id || member.user) === String(userId)
-      );
-
-      if (!alreadyMember) {
-        try {
-          const { data } = await api.get(`/rooms/${roomId}`);
-          setCurrentRoom(data);
-        } catch (error) {
-          console.error('Failed to refresh room members', error);
-        }
-        return;
-      }
-
-      setPresence(userId, 'online');
-    });
-
-    socket.on('user-left', ({ userId, username }) => {
-      toast(`${username} left the room`, { icon: '👋' });
-      setPresence(userId, 'offline');
-    });
-
-    // Typing indicators
-    socket.on('user-typing', ({ userId, username }) => {
-      setTypingUsers(prev => {
-        const newSet = new Set(prev);
-        newSet.add(username);
-        return newSet;
-      });
-    });
-
-    socket.on('user-stop-typing', ({ userId, username }) => {
-      setTypingUsers(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(username);
-        return newSet;
-      });
-    });
-
-    // Message deleted - using functional update to avoid stale closure
-    socket.on('message-deleted', ({ messageId }) => {
-      setMessages(prev => prev.filter(m => String(m._id) !== String(messageId)));
-    });
-
-    socket.on('reaction-added', ({ messageId, reactions }) => {
-      setMessages(prev => prev.map(msg => (
-        String(msg._id) === String(messageId) ? { ...msg, reactions } : msg
-      )));
-    });
-  };
-
-  const handleReaction = (messageId, reactions) => {
-    setMessages(prev => prev.map(msg => (
-      String(msg._id) === String(messageId) ? { ...msg, reactions } : msg
-    )));
-  };
-
-  const handleDeleted = (messageId) => {
-    setMessages(prev => prev.filter(m => String(m._id) !== String(messageId)));
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  };
-
-  const handleSendMessage = async (e) => {
+  /* ── send ── */
+  const handleSend = useCallback(async (e) => {
     e.preventDefault();
     const text = newMessage.trim();
     if (!text) return;
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = null;
+    getSocket()?.emit("typing-stop", roomId);
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
-    }
-
-    const replyId = replyTo?._id;
-    const replySnapshot = replyTo;
+    const rid      = replyTo?._id;
+    const rSnap    = replyTo;
     setReplyTo(null);
     setShowMentions(false);
-    setNewMessage('');
+    setNewMessage("");
 
-    const socket = getSocket();
-    if (socket) socket.emit('typing-stop', roomId);
-
-    // ── Optimistic message: show immediately with a temp ID ──────────
     const tempId = `temp-${Date.now()}`;
-    const optimistic = {
-      _id: tempId,
-      content: text,
-      sender: user,
-      createdAt: new Date().toISOString(),
-      type: 'text',
-      reactions: [],
-      replyTo: replySnapshot
-        ? { _id: replyId, content: replySnapshot.content, sender: replySnapshot.sender }
-        : null,
-      _optimistic: true
-    };
-    setMessages(prev => [...prev, optimistic]);
+    setMessages(p => [...p, {
+      _id: tempId, content: text, sender: user,
+      createdAt: new Date().toISOString(), type: "text", reactions: [],
+      replyTo: rSnap ? { _id: rid, content: rSnap.content, sender: rSnap.sender } : null,
+      _optimistic: true,
+    }]);
 
     try {
-      const { data } = await api.post(`/messages/${roomId}`, {
-        content: text,
-        ...(replyId ? { replyTo: replyId } : {})
+      const { data } = await api.post(`/messages/${roomId}`, { content: text, ...(rid ? { replyTo: rid } : {}) });
+      setMessages(p => {
+        if (p.some(m => String(m._id) === String(data._id))) return p.filter(m => m._id !== tempId);
+        return p.map(m => m._id === tempId ? data : m);
       });
-
-      setMessages(prev => {
-        if (prev.some(m => String(m._id) === String(data._id))) {
-          return prev.filter(m => m._id !== tempId);
-        }
-        return prev.map(m => m._id === tempId ? data : m);
-      });
-
-    } catch (error) {
-      // Remove failed optimistic bubble and restore input
-      setMessages(prev => prev.filter(m => m._id !== tempId));
+    } catch {
+      setMessages(p => p.filter(m => m._id !== tempId));
       setNewMessage(text);
-      toast.error('Failed to send message');
+      toast.error("Failed to send message — tap to retry");
     }
-  };
+  }, [newMessage, replyTo, roomId, user]);
 
-  const handleTyping = (val) => {
+  /* ── typing ── */
+  const handleTyping = useCallback((val) => {
     const socket = getSocket();
     if (socket) {
-      if (!typingTimeoutRef.current) socket.emit('typing-start', roomId);
+      if (!typingTimeoutRef.current) socket.emit("typing-start", roomId);
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
-        socket.emit('typing-stop', roomId);
+        socket.emit("typing-stop", roomId);
         typingTimeoutRef.current = null;
-      }, 1000);
+      }, 1200);
     }
-
-    // @mention autocomplete detection
     const cursor = textareaRef.current?.selectionStart ?? val.length;
-    const textUpToCursor = val.slice(0, cursor);
-    const mentionMatch = textUpToCursor.match(/@(\w*)$/);
-    if (mentionMatch) {
-      setMentionQuery(mentionMatch[1].toLowerCase());
-      setShowMentions(true);
-    } else {
-      setShowMentions(false);
-      setMentionQuery('');
-    }
-  };
+    const m      = val.slice(0, cursor).match(/@(\w*)$/);
+    if (m) { setMentionQuery(m[1].toLowerCase()); setShowMentions(true); }
+    else   { setShowMentions(false); setMentionQuery(""); }
+  }, [roomId]);
 
-  const handleMentionSelect = (username) => {
-    const cursor = textareaRef.current?.selectionStart ?? newMessage.length;
-    const before = newMessage.slice(0, cursor);
-    const after = newMessage.slice(cursor);
-    const replaced = before.replace(/@\w*$/, `@${username} `);
-    setNewMessage(replaced + after);
-    setShowMentions(false);
-    setMentionQuery('');
-    textareaRef.current?.focus();
-  };
-
-  // Members whose username starts with the mention query
-  const mentionSuggestions = mentionQuery !== undefined
-    ? (currentRoom?.members || [])
-        .map(m => m.user?.username)
-        .filter(u => u && u.toLowerCase().startsWith(mentionQuery) && u !== user?.username)
-        .slice(0, 5)
-    : [];
-
-  const handleFileUpload = async (e) => {
+  /* ── file upload ── */
+  const handleFile = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast.error("Max 10 MB"); return; }
 
-    // Check file size (10MB limit)
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be less than 10MB');
-      return;
-    }
-
-    const tempId = `temp-file-${Date.now()}`;
-    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
-    setMessages(prev => [...prev, {
-      _id: tempId,
-      _optimistic: true,
-      content: '',
-      sender: user,
+    const tempId     = `temp-file-${Date.now()}`;
+    const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
+    setMessages(p => [...p, {
+      _id: tempId, _optimistic: true, content: "", sender: user,
       createdAt: new Date().toISOString(),
-      type: file.type.startsWith('image/') ? 'image' : 'file',
+      type: file.type.startsWith("image/") ? "image" : "file",
       reactions: [],
-      file: {
-        url: previewUrl,
-        filename: file.name,
-        mimetype: file.type,
-        size: file.size
-      }
+      file: { url: previewUrl, filename: file.name, mimetype: file.type, size: file.size },
     }]);
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
+    const fd = new FormData();
+    fd.append("file", file);
     try {
-      const { data } = await api.post(`/messages/${roomId}/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
+      const { data } = await api.post(`/messages/${roomId}/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } });
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setMessages(prev => {
-        if (prev.some(m => String(m._id) === String(data._id))) {
-          return prev.filter(m => m._id !== tempId);
-        }
-        return prev.map(m => (m._id === tempId ? data : m));
+      setMessages(p => {
+        if (p.some(m => String(m._id) === String(data._id))) return p.filter(m => m._id !== tempId);
+        return p.map(m => m._id === tempId ? data : m);
       });
-
-      toast.success('File uploaded');
-    } catch (error) {
+      toast.success("Uploaded!");
+    } catch (err) {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setMessages(prev => prev.filter(m => m._id !== tempId));
-      console.error('Upload error:', error);
-      toast.error(error.response?.data?.message || 'Failed to upload file. Please check Cloudinary configuration.');
+      setMessages(p => p.filter(m => m._id !== tempId));
+      toast.error(err.response?.data?.message || "Upload failed");
     } finally {
       setUploading(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
+  }, [roomId, user]);
 
-  const handleLeaveRoom = async () => {
-    if (confirm('Are you sure you want to leave this room?')) {
-      const result = await leaveRoom(roomId);
-      if (result.success) {
-        toast.success('Left room');
-        navigate('/rooms');
-      }
-    }
-  };
+  /* ── mention suggestions ── */
+  const mentionSuggestions = useMemo(() =>
+    (currentRoom?.members || [])
+      .map(m => m.user?.username)
+      .filter(u => u && u.toLowerCase().startsWith(mentionQuery) && u !== user?.username)
+      .slice(0, 5),
+    [currentRoom?.members, mentionQuery, user?.username]
+  );
+  const handleMentionSelect = useCallback((username) => {
+    const cur  = textareaRef.current?.selectionStart ?? newMessage.length;
+    const repl = newMessage.slice(0, cur).replace(/@\w*$/, `@${username} `);
+    setNewMessage(repl + newMessage.slice(cur));
+    setShowMentions(false);
+    textareaRef.current?.focus();
+  }, [newMessage]);
 
-  const handleBackgroundChange = (backgroundId) => {
-    setChatBackground(backgroundId);
-    // Save to localStorage for persistence
-    localStorage.setItem(`room-bg-${roomId}`, backgroundId);
-    toast.success('Background updated', { icon: '🎨' });
-  };
+  /* ── background ── */
+  const handleBgChange = useCallback((id) => {
+    setChatBg(id);
+    localStorage.setItem(`room-bg-${roomId}`, id);
+    toast.success("Theme updated 🎨");
+  }, [roomId]);
 
-  const isCreatorOrAdmin =
-    Boolean(user?._id) && (
-      String(currentRoom?.creator?._id || currentRoom?.creator) === String(user._id) ||
-      currentRoom?.members?.some(
-        (m) => String(m.user?._id || m.user) === String(user._id) && m.role === 'admin'
-      )
-    );
+  /* ── room actions ── */
+  const isAdmin = Boolean(user?._id) && (
+    String(currentRoom?.creator?._id || currentRoom?.creator) === String(user._id) ||
+    currentRoom?.members?.some(m => String(m.user?._id || m.user) === String(user._id) && m.role === "admin")
+  );
 
-  const handleDeleteRoom = async () => {
-    if (window.confirm(`Are you sure you want to permanently delete "${currentRoom?.name}"? All messages and games will be deleted.`)) {
-      const result = await useRoomStore.getState().deleteRoom(roomId);
-      if (result.success) {
-        toast.success('Room deleted successfully');
-        navigate('/rooms');
-      } else {
-        toast.error(result.message || 'Failed to delete room');
-      }
-    }
-  };
+  const doLeave = useCallback(async () => {
+    const r = await leaveRoom(roomId);
+    if (r.success) { toast.success("Left room"); navigate("/rooms"); }
+  }, [leaveRoom, roomId, navigate]);
 
+  const doDelete = useCallback(async () => {
+    const r = await useRoomStore.getState().deleteRoom(roomId);
+    if (r.success) { toast.success("Room deleted"); navigate("/rooms"); }
+    else toast.error(r.message || "Failed to delete");
+  }, [roomId, navigate]);
+
+  /* ── scroll to bottom ── */
+  const scrollToBottom = useCallback(() => {
+    virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "smooth" });
+  }, []);
+
+  /* ── loading skeleton ── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin"></div>
+      <div className="room-page flex flex-col" style={{ background: "linear-gradient(180deg,#0b1a2e,#081321)" }}>
+        <div className="h-16 mx-3 mt-3 rounded-3xl skeleton" />
+        <div className="flex-1 flex flex-col gap-5 p-4 overflow-hidden">
+          {[1,2,3,4,5].map(i => <MessageSkeleton key={i} />)}
+        </div>
+        <div className="h-14 mx-4 mb-4 rounded-2xl skeleton" />
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-background text-primary flex flex-col">
+    <div className="room-page flex flex-col text-primary" style={{ background: "linear-gradient(180deg,#0b1a2e,#081321)" }}>
 
-      <header className="shrink-0 px-3 pt-3 sm:px-4">
-        <div className="flex items-center gap-3 rounded-[1.6rem] border border-white/10 bg-surface/80 backdrop-blur-xl px-3 py-2.5 shadow-[0_16px_40px_rgba(0,0,0,0.28)]">
+      {/* ── Reconnecting banner ── */}
+      {!socketOk && (
+        <div className="reconnect-banner">
+          <WifiOff className="w-3.5 h-3.5" />
+          Reconnecting to chat…
+        </div>
+      )}
+
+      {/* ══════════ HEADER ══════════ */}
+      <header className="shrink-0 px-3 pt-3">
+        <div
+          className="flex items-center gap-2 rounded-[1.6rem] px-3 py-2.5"
+          style={{
+            background: "rgba(16,25,42,0.85)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            backdropFilter: "blur(20px)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+          }}
+        >
+          {/* Back */}
           <button
-            onClick={() => navigate('/rooms')}
-            className="shrink-0 flex items-center justify-center w-10 h-10 rounded-2xl bg-white/5 text-secondary hover:text-primary hover:bg-white/10"
+            onClick={() => navigate("/rooms")}
+            aria-label="Back to rooms"
             title="Back to rooms"
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl text-white/50 hover:text-white/90 hover:bg-white/8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Room identity */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="relative shrink-0">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-accent to-[#8d3d28] text-white font-display text-xl flex items-center justify-center shadow-[0_10px_24px_rgba(196,107,74,0.35)]">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-display text-lg text-white shadow-[0_6px_20px_rgba(196,107,74,0.3)]"
+                style={{ background: "linear-gradient(135deg,#c46b4a,#8d3d28)" }}>
                 {currentRoom?.name?.[0]?.toUpperCase()}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-surface" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 bg-green-400"
+                style={{ borderColor: "#10192a" }} />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-secondary">Room</p>
-              <h1 className="font-display text-[1.35rem] leading-none truncate">{currentRoom?.name}</h1>
-              <p className="text-[11px] text-secondary mt-1">
-                {currentRoom?.members?.length || 0} people here
+              <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">Room</p>
+              <h1 className="font-display text-[1.2rem] leading-none truncate text-white/90">
+                {currentRoom?.name}
+              </h1>
+              <p className="text-[11px] text-white/35 mt-0.5">
+                {currentRoom?.members?.length || 0} members
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 rounded-full bg-black/25 border border-white/8 p-1">
-            <HeaderTool label="Theme" onClick={() => setShowBackgroundSelector(true)}>
-              <Palette className="w-4 h-4" />
-            </HeaderTool>
-            <HeaderTool label="Games" onClick={() => setShowGames(!showGames)} active={showGames}>
-              <Gamepad2 className="w-4 h-4" />
-            </HeaderTool>
-            <HeaderTool label="Voice" onClick={() => setShowVoiceChat(true)} active={showVoiceChat} tone="green">
-              <Mic className="w-4 h-4" />
-            </HeaderTool>
-            <HeaderTool label="People" onClick={() => setShowMembers(!showMembers)} active={showMembers}>
-              <Users className="w-4 h-4" />
-            </HeaderTool>
+          {/* Nav pills */}
+          <div className="flex items-center gap-0.5 rounded-full p-1" style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <NavBtn icon={Palette}   label="Theme"  onClick={() => setShowBgSelector(true)}  active={false} />
+            <NavBtn icon={Gamepad2}  label="Games"  onClick={() => setShowGames(v => !v)}     active={showGames} />
+            <NavBtn icon={Mic}       label="Voice"  onClick={() => setShowVoiceChat(v => !v)} active={showVoiceChat} tone="green" />
+            <NavBtn icon={Users}     label="People" onClick={() => setShowMembers(v => !v)}   active={showMembers} />
           </div>
 
+          {/* Profile button */}
           <button
-            onClick={() => navigate('/profile')}
-            className="hidden sm:flex items-center gap-2 h-10 pl-1 pr-3 rounded-full bg-white/5 hover:bg-white/10"
+            onClick={() => navigate("/profile")}
             title="Your profile"
+            aria-label="Your profile"
+            className="hidden sm:flex items-center gap-2 h-9 pl-1 pr-3 rounded-full hover:bg-white/8 transition-colors"
           >
             <Avatar user={user} size="sm" />
-            <span className="text-sm font-medium max-w-[88px] truncate">{user?.username}</span>
+            <span className="text-[12px] font-medium max-w-[80px] truncate text-white/70">{user?.username}</span>
           </button>
 
-          <button
-            onClick={handleLeaveRoom}
-            className="shrink-0 flex items-center justify-center w-10 h-10 rounded-2xl text-red-300 hover:bg-red-500/15"
-            title="Leave room"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-          {isCreatorOrAdmin && (
+          {/* ⋯ Settings dropdown */}
+          <div className="relative shrink-0">
             <button
-              onClick={handleDeleteRoom}
-              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-2xl text-red-300 hover:bg-red-500/15"
-              title="Delete room"
+              onClick={() => setShowSettings(v => !v)}
+              aria-label="Room settings"
+              title="Room settings"
+              className="w-9 h-9 flex items-center justify-center rounded-2xl text-white/40 hover:text-white/80 hover:bg-white/8 transition-colors"
             >
-              <Trash2 className="w-4 h-4" />
+              <MoreVertical className="w-4 h-4" />
             </button>
-          )}
+            <AnimatePresence>
+              {showSettings && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.93, y: -6 }}
+                  animate={{ opacity: 1, scale: 1,    y: 0  }}
+                  exit={{   opacity: 0, scale: 0.93, y: -6  }}
+                  transition={{ duration: 0.14 }}
+                  className="absolute right-0 top-full mt-2 w-44 rounded-2xl overflow-hidden z-50 shadow-2xl"
+                  style={{ background: "#10192a", border: "1px solid rgba(255,255,255,0.09)" }}
+                >
+                  <button
+                    onClick={() => { setShowSettings(false); setConfirmLeave(true); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/6 hover:text-white transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Leave Room
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => { setShowSettings(false); setConfirmDelete(true); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete Room
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-3 sm:px-5 py-4 space-y-2 min-h-full" style={getBgStyle(chatBackground)}>
-            {messages.map((message) => (
-              <Message
-                key={message._id}
-                message={message}
-                currentUser={user}
-                onReaction={handleReaction}
-                onDeleted={handleDeleted}
-                onReply={(msg) => {
-                  setReplyTo(msg);
-                  textareaRef.current?.focus();
+      {/* ══════════ BODY ══════════ */}
+      <div className="flex-1 flex overflow-hidden mt-2 mx-3 mb-3 gap-3">
+
+        {/* Chat column */}
+        <div
+          className="flex-1 flex flex-col rounded-3xl overflow-hidden min-w-0"
+          style={{ background: "rgba(10,18,30,0.6)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)" }}
+        >
+          {/* Messages */}
+          <div className="flex-1 relative overflow-hidden" role="log" aria-live="polite" aria-label="Messages" style={getBgStyle(chatBg)}>
+            {messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center gap-3 text-white/30 text-sm">
+                <span className="text-4xl">💬</span>
+                <p>No messages yet. Say hi!</p>
+              </div>
+            ) : (
+              <Virtuoso
+                ref={virtuosoRef}
+                data={rows}
+                followOutput="smooth"
+                atBottomStateChange={setAtBottom}
+                style={{ height: "100%" }}
+                itemContent={(_, row) => {
+                  if (row.type === "day") return (
+                    <div key={row.id} className="day-divider px-6 py-2">
+                      <span>{row.label}</span>
+                    </div>
+                  );
+                  return (
+                    <div
+                      key={row.id}
+                      className="px-4 py-[2px]"
+                      style={{ paddingTop: row.isFirst ? "10px" : "2px" }}
+                    >
+                      <Message
+                        message={row.msg}
+                        currentUser={user}
+                        isFirst={row.isFirst}
+                        onReaction={handleReaction}
+                        onDeleted={handleDeleted}
+                        onReply={handleReply}
+                      />
+                    </div>
+                  );
+                }}
+                components={{
+                  Footer: () => (
+                    <div>
+                      {/* Typing indicator */}
+                      {typingUsers.size > 0 && (
+                        <div className="flex items-center gap-2 px-6 py-2 text-[12px] text-white/40">
+                          <span className="flex gap-1">
+                            {[0,1,2].map(i => <span key={i} className={`typing-dot w-1.5 h-1.5 rounded-full bg-accent/60`} />)}
+                          </span>
+                          {Array.from(typingUsers).join(", ")} {typingUsers.size === 1 ? "is" : "are"} typing
+                        </div>
+                      )}
+                      {/* Voice call card */}
+                      {voiceCallCard && (
+                        <div className="mx-4 my-3 flex justify-center">
+                          <div className={`w-full max-w-sm rounded-3xl p-4 flex flex-col gap-3 border ${voiceCallCard.active ? "bg-emerald-950/80 border-emerald-400/30" : "border-white/10"}`} style={{ background: voiceCallCard.active ? undefined : "rgba(16,25,42,0.8)" }}>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center ${voiceCallCard.active ? "bg-emerald-400/15" : "bg-white/5"}`}>
+                                <Phone className={`w-4 h-4 ${voiceCallCard.active ? "text-emerald-300" : "text-white/40"}`} />
+                              </div>
+                              <div>
+                                <p className="text-[13px] font-medium text-white/80">
+                                  {voiceCallCard.active ? `${voiceCallCard.username} started a voice call` : "Voice call ended"}
+                                </p>
+                                {voiceCallCard.active && (
+                                  <p className="text-[11px] text-white/40">{voiceCallCard.participantCount} participant{voiceCallCard.participantCount > 1 ? "s" : ""}</p>
+                                )}
+                              </div>
+                            </div>
+                            {voiceCallCard.active && (
+                              <button onClick={() => setShowVoiceChat(true)}
+                                className="w-full py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white text-[13px] font-semibold flex items-center justify-center gap-2">
+                                <Phone className="w-3.5 h-3.5" /> Join Voice Chat
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ height: 8 }} />
+                    </div>
+                  ),
                 }}
               />
-            ))}
+            )}
 
-            {voiceCallCard && (
-              <div className="flex justify-center my-3">
-                <div
-                  className={`w-full max-w-sm rounded-3xl p-4 flex flex-col gap-3 border ${
-                    voiceCallCard.active
-                      ? 'bg-emerald-950/80 border-emerald-400/30'
-                      : 'bg-surface border-border'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${voiceCallCard.active ? 'bg-emerald-400/15' : 'bg-background'}`}>
-                      <Phone className={`w-4 h-4 ${voiceCallCard.active ? 'text-emerald-300' : 'text-secondary'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">
-                        {voiceCallCard.active
-                          ? `${voiceCallCard.username} started a voice call`
-                          : 'Voice call ended'}
-                      </p>
-                      <p className="text-xs text-secondary mt-0.5">
-                        {voiceCallCard.active
-                          ? `${voiceCallCard.participantCount} participant${voiceCallCard.participantCount > 1 ? 's' : ''} · Tap to join`
-                          : 'The call has ended'}
-                      </p>
-                    </div>
-                  </div>
-                  {voiceCallCard.active && (
-                    <button
-                      onClick={() => setShowVoiceChat(true)}
-                      className="w-full py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      <Phone className="w-4 h-4" />
-                      Join Voice Chat
-                    </button>
-                  )}
-                </div>
-              </div>
+            {/* Jump to latest */}
+            {!atBottom && (
+              <motion.button
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                onClick={scrollToBottom}
+                className="jump-btn"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+                Jump to latest
+              </motion.button>
             )}
-            
-            {typingUsers.size > 0 && (
-              <div className="flex items-center gap-2 text-sm text-secondary px-2">
-                <span className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent" style={{ animation: 'typingBounce 1s infinite' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent" style={{ animation: 'typingBounce 1s infinite 0.15s' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent" style={{ animation: 'typingBounce 1s infinite 0.3s' }} />
-                </span>
-                {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
-            </div>
           </div>
 
+          {/* Voice panel (inline strip) */}
           {showVoiceChat && (
-            <VoiceChat
-              roomId={roomId}
-              onClose={() => setShowVoiceChat(false)}
-            />
+            <Suspense fallback={null}>
+              <VoiceChat roomId={roomId} onClose={() => setShowVoiceChat(false)} />
+            </Suspense>
           )}
 
-          <div className="px-4 pb-4 pt-2 border-t border-white/[0.05] bg-surface/30 backdrop-blur-sm">
-
-            {/* Reply preview bar */}
+          {/* ── Input area ── */}
+          <div
+            className="shrink-0 px-3 pb-3 pt-2"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+          >
+            {/* Reply bar */}
             <AnimatePresence>
               {replyTo && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 6 }}
-                  className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-accent/10 border border-accent/20"
+                  className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl"
+                  style={{ background: "rgba(196,107,74,0.1)", border: "1px solid rgba(196,107,74,0.2)" }}
                 >
                   <Reply className="w-3.5 h-3.5 text-accent shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[11px] text-accent font-semibold">{replyTo.sender?.username}</span>
-                    <span className="text-[11px] text-secondary ml-1.5">{replyTo.content?.slice(0, 70)}</span>
+                  <div className="flex-1 min-w-0 text-[11px]">
+                    <span className="font-semibold text-accent">{replyTo.sender?.username}</span>
+                    <span className="ml-1.5 text-white/45">{replyTo.content?.slice(0, 70)}</span>
                   </div>
-                  <button onClick={() => setReplyTo(null)} className="text-secondary hover:text-primary transition-colors shrink-0">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <button onClick={() => setReplyTo(null)} className="text-white/35 hover:text-white/70"><X className="w-3.5 h-3.5" /></button>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* @mention autocomplete dropdown */}
+            {/* Mention dropdown */}
             <AnimatePresence>
               {showMentions && mentionSuggestions.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
-                  className="mb-2 rounded-xl bg-surface border border-white/10 shadow-xl overflow-hidden"
+                  className="mb-2 rounded-xl overflow-hidden"
+                  style={{ background: "#10192a", border: "1px solid rgba(255,255,255,0.09)" }}
                 >
-                  {mentionSuggestions.map(username => (
-                    <button
-                      key={username}
-                      onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(username); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/6 transition-colors text-left"
+                  {mentionSuggestions.map(u => (
+                    <button key={u}
+                      onMouseDown={e => { e.preventDefault(); handleMentionSelect(u); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/6 text-left text-[13px]"
                     >
                       <div className="w-6 h-6 rounded-full bg-accent/20 text-accent text-[11px] font-bold flex items-center justify-center shrink-0">
-                        {username[0].toUpperCase()}
+                        {u[0].toUpperCase()}
                       </div>
-                      <span className="text-[13px] font-medium">@{username}</span>
+                      @{u}
                     </button>
                   ))}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <form onSubmit={handleSendMessage} className="flex items-end gap-2 rounded-2xl border border-white/8 bg-surface/80 backdrop-blur-xl p-2 shadow-lg">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="p-2 rounded-xl text-secondary hover:text-primary hover:bg-white/6 disabled:opacity-50 transition-colors shrink-0"
-                title="Upload file"
-              >
+            {/* Input row */}
+            <form onSubmit={handleSend}
+              className="flex items-end gap-2 rounded-2xl p-2"
+              style={{ background: "rgba(16,25,42,0.8)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}
+            >
+              {/* Attach */}
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                aria-label="Upload file" title="Upload file"
+                className="p-2 rounded-xl text-white/40 hover:text-white/80 hover:bg-white/8 disabled:opacity-30 transition-colors shrink-0">
                 <Paperclip className="w-4.5 h-4.5" />
               </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                className="hidden"
-                accept="image/*,video/*,.pdf,.doc,.docx,.txt"
-              />
+              <input ref={fileInputRef} type="file" onChange={handleFile} className="hidden"
+                accept="image/*,video/*,.pdf,.doc,.docx,.txt,.gif" />
 
+              {/* Textarea */}
               <div className="flex-1 relative">
                 <textarea
                   ref={textareaRef}
                   value={newMessage}
-                  onChange={(e) => {
-                    setNewMessage(e.target.value);
-                    handleTyping(e.target.value);
+                  onChange={e => { setNewMessage(e.target.value); handleTyping(e.target.value); }}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") { setReplyTo(null); setShowMentions(false); }
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); }
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') { setReplyTo(null); setShowMentions(false); }
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e);
-                    }
-                  }}
-                  placeholder={replyTo ? `Reply to ${replyTo.sender?.username}…` : 'Message… (``` for code, @ to mention)'}
+                  placeholder={replyTo ? `Reply to ${replyTo.sender?.username}…` : "Message… (``` code, @ mention, Shift+Enter new line)"}
                   rows={1}
-                  className="w-full px-3 py-2 bg-transparent resize-none focus:outline-none text-primary placeholder:text-secondary/60 text-[14px] leading-relaxed"
+                  aria-label="Message input"
+                  className="auto-grow w-full px-3 py-2 bg-transparent text-primary text-[14px] leading-relaxed focus:outline-none placeholder:text-white/25"
                 />
+                {/* Emoji picker */}
                 {showEmojiPicker && (
-                  <EmojiPicker
-                    onSelect={(emoji) => setNewMessage(prev => prev + emoji)}
-                    onClose={() => setShowEmojiPicker(false)}
-                  />
+                  <Suspense fallback={null}>
+                    <EmojiPicker
+                      onSelect={emoji => setNewMessage(p => p + emoji)}
+                      onClose={() => setShowEmojiPicker(false)}
+                    />
+                  </Suspense>
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className={`p-2 rounded-xl transition-colors shrink-0 ${showEmojiPicker ? 'bg-accent/20 text-accent' : 'text-secondary hover:text-primary hover:bg-white/6'}`}
-              >
+              {/* Emoji toggle */}
+              <button type="button" onClick={() => setShowEmojiPicker(v => !v)}
+                aria-label="Emoji picker" title="Emoji picker"
+                className={`p-2 rounded-xl transition-colors shrink-0 ${showEmojiPicker ? "bg-accent/20 text-accent" : "text-white/40 hover:text-white/80 hover:bg-white/8"}`}>
                 <Smile className="w-4.5 h-4.5" />
               </button>
 
-              <button
-                type="submit"
+              {/* Send */}
+              <button type="submit"
                 disabled={!newMessage.trim() || uploading}
-                className="p-2 bg-accent hover:bg-accent-hover text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-              >
+                aria-label="Send message"
+                title="Send message"
+                className="p-2 rounded-xl bg-accent hover:bg-accent-hover text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
                 <Send className="w-4.5 h-4.5" />
               </button>
             </form>
 
             {uploading && (
-              <div className="mt-2 text-[12px] text-secondary flex items-center gap-2 px-1">
-                <div className="w-3 h-3 border-2 border-accent/30 border-t-accent rounded-full animate-spin"></div>
-                Uploading...
-              </div>
+              <p className="mt-1.5 text-[11px] text-white/35 flex items-center gap-1.5 px-1">
+                <span className="w-3 h-3 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
+                Uploading…
+              </p>
             )}
           </div>
         </div>
 
-        {showMembers && (
-          <MembersSidebar 
-            room={currentRoom} 
-            onClose={() => setShowMembers(false)} 
-          />
-        )}
-        {showGames && (
-          <GamesPanel 
-            roomId={roomId} 
-            onClose={() => setShowGames(false)} 
-          />
-        )}
+        {/* Members panel */}
+        <AnimatePresence>
+          {showMembers && (
+            <MembersSidebar room={currentRoom} onClose={() => setShowMembers(false)} />
+          )}
+        </AnimatePresence>
+
+        {/* Games panel */}
+        <AnimatePresence>
+          {showGames && (
+            <Suspense fallback={<div className="w-80 rounded-3xl skeleton" />}>
+              <GamesPanel roomId={roomId} onClose={() => setShowGames(false)} />
+            </Suspense>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Background Selector Modal */}
+      {/* ── Modals ── */}
       <AnimatePresence>
-        {showBackgroundSelector && (
+        {showBgSelector && (
           <BackgroundSelector
-            currentBackground={chatBackground}
-            onChange={handleBackgroundChange}
-            onClose={() => setShowBackgroundSelector(false)}
+            currentBackground={chatBg}
+            onChange={handleBgChange}
+            onClose={() => setShowBgSelector(false)}
           />
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={confirmLeave}
+        onClose={() => setConfirmLeave(false)}
+        onConfirm={doLeave}
+        title="Leave Room?"
+        message={`You will no longer see messages from "${currentRoom?.name}". You can rejoin with the room code.`}
+        confirmText="Leave"
+        cancelText="Stay"
+      />
+      <ConfirmModal
+        isOpen={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={doDelete}
+        title={`Delete "${currentRoom?.name}"?`}
+        message="This permanently deletes all messages, games, and room data. This action cannot be undone."
+        confirmText="Delete Forever"
+        isDanger
+      />
     </div>
   );
 };
 
 export default Room;
+
