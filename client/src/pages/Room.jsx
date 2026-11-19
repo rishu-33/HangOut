@@ -774,7 +774,7 @@ const Room = () => {
               <Suspense fallback={null}>
                 <VoiceChat roomId={roomId} onClose={() => setShowVoiceChat(false)} />
               </Suspense>
-            )}
+            )
 
             {/* ── Composer ── */}
             <div className="composer-wrap">
@@ -865,23 +865,25 @@ const Room = () => {
                     <button
                       type="button"
                       onClick={() => setShowEmojiPicker(v => !v)}
-                      className="composer-emoji-btn"
+                      className="p-2 rounded-lg text-white/50 hover:text-white/80 hover:bg-white/8 transition-colors"
                       title="Emoji"
                     >
                       <Smile className="w-5 h-5" />
                     </button>
-                    {showEmojiPicker && (
-                      <Suspense fallback={null}>
-                        <EmojiPicker
-                          onSelect={emoji => {
-                            setNewMessage(m => m + emoji);
-                            setShowEmojiPicker(false);
-                            textareaRef.current?.focus();
-                          }}
-                          onClose={() => setShowEmojiPicker(false)}
-                        />
-                      </Suspense>
-                    )}
+                    <AnimatePresence>
+                      {showEmojiPicker && (
+                        <Suspense fallback={null}>
+                          <EmojiPicker
+                            onSelect={emoji => {
+                              setNewMessage(m => m + emoji);
+                              setShowEmojiPicker(false);
+                              textareaRef.current?.focus();
+                            }}
+                            onClose={() => setShowEmojiPicker(false)}
+                          />
+                        </Suspense>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </form>
 
@@ -905,7 +907,7 @@ const Room = () => {
             <Suspense fallback={null}>
               <GamesPanel roomId={roomId} onClose={() => setShowGames(false)} />
             </Suspense>
-          )}
+          )
         </div>
       </div>
 
@@ -938,6 +940,12 @@ const Room = () => {
 };
 
 export default Room;
+
+
+
+
+
+
 
 
 
