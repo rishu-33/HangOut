@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft, Send, Paperclip, Smile, Users,
   LogOut, Gamepad2, Mic, Trash2, Phone, Palette, X, Reply,
-  ChevronDown, Wifi, WifiOff, MoreVertical
+  ChevronDown, WifiOff, MoreVertical, Plus, DoorOpen, Menu, Search
 } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import useAuthStore from "../store/authStore";
@@ -19,13 +19,14 @@ import MembersSidebar from "../components/MembersSidebar";
 import Avatar from "../components/Avatar";
 import ConfirmModal from "../components/ConfirmModal";
 import BackgroundSelector, { getBgStyle } from "../components/BackgroundSelector";
+import CreateRoomModal from "../components/CreateRoomModal";
+import JoinRoomModal from "../components/JoinRoomModal";
 
-/* Code-split heavy panels */
-const GamesPanel   = lazy(() => import("../components/GamesPanel"));
-const VoiceChat    = lazy(() => import("../components/VoiceChat"));
-const EmojiPicker  = lazy(() => import("../components/EmojiPicker"));
+const GamesPanel  = lazy(() => import("../components/GamesPanel"));
+const VoiceChat   = lazy(() => import("../components/VoiceChat"));
+const EmojiPicker = lazy(() => import("../components/EmojiPicker"));
 
-/* ── Skeleton ─────────────────────────────────────────────────────────── */
+/* ── Skeleton ──────────────────────────────────────────────────────────── */
 const MessageSkeleton = () => (
   <div className="flex items-end gap-2 px-4">
     <div className="skeleton w-8 h-8 rounded-full shrink-0" />
@@ -36,73 +37,75 @@ const MessageSkeleton = () => (
   </div>
 );
 
-/* ── Day divider ──────────────────────────────────────────────────────── */
+/* ── Day label ─────────────────────────────────────────────────────────── */
 function dayLabel(iso) {
-  const d   = new Date(iso);
-  const now = new Date();
+  const d = new Date(iso), now = new Date();
   if (d.toDateString() === now.toDateString()) return "Today";
   const y = new Date(now); y.setDate(now.getDate() - 1);
   if (d.toDateString() === y.toDateString()) return "Yesterday";
   return d.toLocaleDateString([], { weekday:"long", month:"short", day:"numeric" });
 }
 
-/* ── Pill nav button ──────────────────────────────────────────────────── */
-const NavBtn = ({ icon: Icon, label, onClick, active, tone = "default" }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title={label}
-    aria-label={label}
-    aria-pressed={active}
-    className={`flex items-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-full text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-      active
-        ? tone === "green"
-          ? "bg-emerald-500 text-white shadow-[0_6px_18px_rgba(52,211,153,0.3)]"
-          : "bg-accent text-white shadow-[0_6px_18px_rgba(196,107,74,0.3)]"
-        : "text-white/50 hover:text-white/90 hover:bg-white/8"
-    }`}
-  >
-    <Icon className="w-4 h-4" />
-    <span className="hidden lg:inline">{label}</span>
-  </button>
-);
+/* ── Relative time for sidebar ─────────────────────────────────────────── */
+function relTime(iso) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
 
-/* ── Room page ────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   ROOM PAGE
+   ═══════════════════════════════════════════════════════════════════════ */
 const Room = () => {
-  const { roomId } = useParams();
-  const navigate   = useNavigate();
-  const { user }   = useAuthStore();
-  const { currentRoom, setCurrentRoom, leaveRoom, removeRoomLocally, updateRoomMembers } = useRoomStore();
+  const { roomId }  = useParams();
+  const navigate    = useNavigate();
+  const { user }    = useAuthStore();
+  const {
+    rooms, fetchRooms,
+    currentRoom, setCurrentRoom,
+    leaveRoom, removeRoomLocally, updateRoomMembers, deleteRoom: storeDeleteRoom,
+  } = useRoomStore();
 
   /* ── state ── */
-  const [messages,       setMessages]       = useState([]);
-  const [newMessage,     setNewMessage]     = useState("");
-  const [loading,        setLoading]        = useState(true);
-  const [socketOk,       setSocketOk]       = useState(true);
-  const [typingUsers,    setTypingUsers]     = useState(new Set());
-  const [showMembers,    setShowMembers]     = useState(false);
-  const [showGames,      setShowGames]       = useState(false);
-  const [showVoiceChat,  setShowVoiceChat]   = useState(false);
-  const [showEmojiPicker,setShowEmojiPicker] = useState(false);
-  const [showBgSelector, setShowBgSelector]  = useState(false);
-  const [showSettings,   setShowSettings]    = useState(false);
-  const [confirmLeave,   setConfirmLeave]    = useState(false);
-  const [confirmDelete,  setConfirmDelete]   = useState(false);
-  const [chatBg,         setChatBg]          = useState(() =>
+  const [messages,        setMessages]        = useState([]);
+  const [newMessage,      setNewMessage]      = useState("");
+  const [loading,         setLoading]         = useState(true);
+  const [socketOk,        setSocketOk]        = useState(true);
+  const [typingUsers,     setTypingUsers]     = useState(new Set());
+  const [showMembers,     setShowMembers]     = useState(false);
+  const [showGames,       setShowGames]       = useState(false);
+  const [showVoiceChat,   setShowVoiceChat]   = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showBgSelector,  setShowBgSelector]  = useState(false);
+  const [showSettings,    setShowSettings]    = useState(false);
+  const [showSidebar,     setShowSidebar]     = useState(false); // mobile sidebar
+  const [confirmLeave,    setConfirmLeave]    = useState(false);
+  const [confirmDelete,   setConfirmDelete]   = useState(false);
+  const [showCreate,      setShowCreate]      = useState(false);
+  const [showJoin,        setShowJoin]        = useState(false);
+  const [chatBg,          setChatBg]          = useState(() =>
     localStorage.getItem(`room-bg-${roomId}`) || "default"
   );
-  const [uploading,      setUploading]      = useState(false);
-  const [replyTo,        setReplyTo]        = useState(null);
-  const [mentionQuery,   setMentionQuery]   = useState("");
-  const [showMentions,   setShowMentions]   = useState(false);
-  const [voiceCallCard,  setVoiceCallCard]  = useState(null);
-  const [atBottom,       setAtBottom]       = useState(true);
+  const [uploading,       setUploading]       = useState(false);
+  const [replyTo,         setReplyTo]         = useState(null);
+  const [mentionQuery,    setMentionQuery]    = useState("");
+  const [showMentions,    setShowMentions]    = useState(false);
+  const [voiceCallCard,   setVoiceCallCard]   = useState(null);
+  const [atBottom,        setAtBottom]        = useState(true);
 
   /* ── refs ── */
   const virtuosoRef      = useRef(null);
   const textareaRef      = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef     = useRef(null);
+
+  /* ── fetch rooms list for sidebar ── */
+  useEffect(() => { fetchRooms(); }, [fetchRooms]);
 
   /* ── load room + messages ── */
   useEffect(() => {
@@ -135,14 +138,10 @@ const Room = () => {
     const code   = roomId?.toUpperCase();
     if (!socket || !code) return;
 
-    const join = () => {
-      socket.emit("join-room", code);
-      setSocketOk(true);
-    };
-    const onDisconnect = () => setSocketOk(false);
-    const onReconnect  = () => { setSocketOk(true); join(); };
+    const join        = () => { socket.emit("join-room", code); setSocketOk(true); };
+    const onDisconn   = () => setSocketOk(false);
+    const onReconn    = () => { setSocketOk(true); join(); };
 
-    /* helpers */
     const patchPresence = (userId, status) => {
       const room = useRoomStore.getState().currentRoom;
       if (!room?.members) return;
@@ -152,7 +151,6 @@ const Room = () => {
       }));
     };
 
-    /* listeners */
     const onNewMessage = (msg) => setMessages(prev => {
       if (prev.some(m => String(m._id) === String(msg._id))) return prev;
       const idx = prev.findIndex(m =>
@@ -172,9 +170,9 @@ const Room = () => {
       } else { patchPresence(userId, "online"); }
     };
     const onUserLeft    = ({ userId, username }) => { toast(`${username} left`, { icon: "👋" }); patchPresence(userId, "offline"); };
-    const onTypingStart = ({ username })          => setTypingUsers(p => { const s = new Set(p); s.add(username);    return s; });
-    const onTypingStop  = ({ username })          => setTypingUsers(p => { const s = new Set(p); s.delete(username); return s; });
-    const onDeleted     = ({ messageId })         => setMessages(p => p.filter(m => String(m._id) !== String(messageId)));
+    const onTypingStart = ({ username }) => setTypingUsers(p => { const s = new Set(p); s.add(username);    return s; });
+    const onTypingStop  = ({ username }) => setTypingUsers(p => { const s = new Set(p); s.delete(username); return s; });
+    const onDeleted     = ({ messageId }) => setMessages(p => p.filter(m => String(m._id) !== String(messageId)));
     const onReaction    = ({ messageId, reactions }) => setMessages(p => p.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
     const onRoomUsers   = (ids) => {
       const room = useRoomStore.getState().currentRoom;
@@ -194,8 +192,7 @@ const Room = () => {
     const onRoomRevoked = ({ roomId: rid }) => {
       if (rid?.toUpperCase() === code) { removeRoomLocally(code); toast.error("You were removed"); navigate("/rooms"); }
     };
-    const onGameInvite = ({ game, inviter, gameType }) => {
-      setGames && null; // panels handle internally
+    const onGameInvite = ({ inviter, gameType }) => {
       toast(t => (
         <div className="flex flex-col gap-2">
           <p className="font-semibold">🎮 {inviter.username} started <strong>{gameType}</strong></p>
@@ -206,18 +203,18 @@ const Room = () => {
               className="px-3 py-1.5 bg-white/10 text-white text-xs rounded-lg">Dismiss</button>
           </div>
         </div>
-      ), { duration: 15000, style: { background: "#1a2235", color: "#fff", border: "1px solid rgba(255,255,255,0.1)", maxWidth: 340 } });
+      ), { duration: 15000, style: { background: "#0a1e30", color: "#fff", border: "1px solid rgba(255,255,255,0.1)", maxWidth: 340 } });
     };
     const onVoiceStarted = ({ userId, username, participantCount }) => {
       if (String(userId) === String(user?._id)) return;
       setVoiceCallCard({ username, participantCount: participantCount || 1, active: true });
     };
     const onVoiceUpdate = ({ participantCount }) => setVoiceCallCard(p => p ? { ...p, participantCount } : p);
-    const onVoiceEnded  = ()                      => setVoiceCallCard(p => p ? { ...p, active: false } : null);
+    const onVoiceEnded  = () => setVoiceCallCard(p => p ? { ...p, active: false } : null);
 
     socket.on("connect",             join);
-    socket.on("disconnect",          onDisconnect);
-    socket.on("reconnect",           onReconnect);
+    socket.on("disconnect",          onDisconn);
+    socket.on("reconnect",           onReconn);
     socket.on("new-message",         onNewMessage);
     socket.on("user-joined",         onUserJoined);
     socket.on("user-left",           onUserLeft);
@@ -237,8 +234,8 @@ const Room = () => {
 
     return () => {
       socket.off("connect",             join);
-      socket.off("disconnect",          onDisconnect);
-      socket.off("reconnect",           onReconnect);
+      socket.off("disconnect",          onDisconn);
+      socket.off("reconnect",           onReconn);
       socket.off("new-message",         onNewMessage);
       socket.off("user-joined",         onUserJoined);
       socket.off("user-left",           onUserLeft);
@@ -258,20 +255,16 @@ const Room = () => {
     };
   }, [roomId]);
 
-  /* ── derived: grouped messages with day-dividers ── */
+  /* ── grouped messages with day-dividers ── */
   const rows = useMemo(() => {
     const out = [];
-    let lastDate = "";
-    let lastSender = "";
+    let lastDate = "", lastSender = "";
     for (const msg of messages) {
-      /* day divider */
       const dateKey = msg.createdAt ? new Date(msg.createdAt).toDateString() : "";
       if (dateKey && dateKey !== lastDate) {
         out.push({ type: "day", id: `day-${dateKey}`, label: dayLabel(msg.createdAt) });
-        lastDate   = dateKey;
-        lastSender = "";           /* reset grouping after divider */
+        lastDate = dateKey; lastSender = "";
       }
-      /* message */
       const senderId = String(msg.sender?._id || msg.sender || "");
       const isFirst  = senderId !== lastSender;
       out.push({ type: "msg", id: msg._id, msg, isFirst });
@@ -280,7 +273,7 @@ const Room = () => {
     return out;
   }, [messages]);
 
-  /* callbacks to avoid re-renders in Message */
+  /* ── callbacks ── */
   const handleReaction = useCallback((id, reactions) =>
     setMessages(p => p.map(m => String(m._id) === String(id) ? { ...m, reactions } : m)), []);
   const handleDeleted  = useCallback((id) =>
@@ -297,13 +290,8 @@ const Room = () => {
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = null;
     getSocket()?.emit("typing-stop", roomId);
-
-    const rid      = replyTo?._id;
-    const rSnap    = replyTo;
-    setReplyTo(null);
-    setShowMentions(false);
-    setNewMessage("");
-
+    const rid = replyTo?._id, rSnap = replyTo;
+    setReplyTo(null); setShowMentions(false); setNewMessage("");
     const tempId = `temp-${Date.now()}`;
     setMessages(p => [...p, {
       _id: tempId, content: text, sender: user,
@@ -311,7 +299,6 @@ const Room = () => {
       replyTo: rSnap ? { _id: rid, content: rSnap.content, sender: rSnap.sender } : null,
       _optimistic: true,
     }]);
-
     try {
       const { data } = await api.post(`/messages/${roomId}`, { content: text, ...(rid ? { replyTo: rid } : {}) });
       setMessages(p => {
@@ -321,7 +308,7 @@ const Room = () => {
     } catch {
       setMessages(p => p.filter(m => m._id !== tempId));
       setNewMessage(text);
-      toast.error("Failed to send message — tap to retry");
+      toast.error("Failed to send");
     }
   }, [newMessage, replyTo, roomId, user]);
 
@@ -337,7 +324,7 @@ const Room = () => {
       }, 1200);
     }
     const cursor = textareaRef.current?.selectionStart ?? val.length;
-    const m      = val.slice(0, cursor).match(/@(\w*)$/);
+    const m = val.slice(0, cursor).match(/@(\w*)$/);
     if (m) { setMentionQuery(m[1].toLowerCase()); setShowMentions(true); }
     else   { setShowMentions(false); setMentionQuery(""); }
   }, [roomId]);
@@ -347,7 +334,6 @@ const Room = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) { toast.error("Max 10 MB"); return; }
-
     const tempId     = `temp-file-${Date.now()}`;
     const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
     setMessages(p => [...p, {
@@ -357,7 +343,6 @@ const Room = () => {
       reactions: [],
       file: { url: previewUrl, filename: file.name, mimetype: file.type, size: file.size },
     }]);
-
     setUploading(true);
     const fd = new FormData();
     fd.append("file", file);
@@ -408,393 +393,599 @@ const Room = () => {
     currentRoom?.members?.some(m => String(m.user?._id || m.user) === String(user._id) && m.role === "admin")
   );
 
-  const doLeave = useCallback(async () => {
+  const doLeave  = useCallback(async () => {
     const r = await leaveRoom(roomId);
     if (r.success) { toast.success("Left room"); navigate("/rooms"); }
   }, [leaveRoom, roomId, navigate]);
 
   const doDelete = useCallback(async () => {
-    const r = await useRoomStore.getState().deleteRoom(roomId);
+    const r = await storeDeleteRoom(roomId);
     if (r.success) { toast.success("Room deleted"); navigate("/rooms"); }
     else toast.error(r.message || "Failed to delete");
-  }, [roomId, navigate]);
+  }, [storeDeleteRoom, roomId, navigate]);
 
-  /* ── scroll to bottom ── */
   const scrollToBottom = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "smooth" });
   }, []);
 
-  /* ── loading skeleton ── */
-  if (loading) {
-    return (
-      <div className="room-page flex flex-col" style={{ background: "linear-gradient(180deg,#0b1a2e,#081321)" }}>
-        <div className="h-16 mx-3 mt-3 rounded-3xl skeleton" />
+  /* ── sidebar room click ── */
+  const handleRoomClick = useCallback((room) => {
+    setCurrentRoom(room);
+    setShowSidebar(false);
+    navigate("/room/" + room.roomId);
+  }, [setCurrentRoom, navigate]);
+
+  /* ── loading ── */
+  if (loading) return (
+    <div className="room-page">
+      <div className="room-sidebar">
+        <div className="sidebar-header">
+          <div className="skeleton h-6 w-28 rounded" />
+        </div>
+        <div className="flex flex-col gap-2 p-3">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="flex items-center gap-3 p-3">
+              <div className="skeleton w-12 h-12 rounded-full shrink-0" />
+              <div className="flex flex-col gap-1.5 flex-1">
+                <div className="skeleton h-3.5 w-28 rounded" />
+                <div className="skeleton h-3 w-40 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="room-chat">
+        <div className="skeleton h-[72px] shrink-0" style={{ borderRadius: 0 }} />
         <div className="flex-1 flex flex-col gap-5 p-4 overflow-hidden">
           {[1,2,3,4,5].map(i => <MessageSkeleton key={i} />)}
         </div>
-        <div className="h-14 mx-4 mb-4 rounded-2xl skeleton" />
+        <div className="skeleton h-[70px] shrink-0 mx-4 mb-4 rounded-full" />
       </div>
-    );
-  }
+    </div>
+  );
 
+  /* ═══════════════════════════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════════════════════════ */
   return (
-    <div className="room-page flex flex-col text-primary" style={{ background: "linear-gradient(180deg,#0b1a2e,#081321)" }}>
+    <div className="room-page">
 
-      {/* ── Reconnecting banner ── */}
-      {!socketOk && (
-        <div className="reconnect-banner">
-          <WifiOff className="w-3.5 h-3.5" />
-          Reconnecting to chat…
+      {/* ══════════════════════════════════════════
+          LEFT SIDEBAR
+          ══════════════════════════════════════════ */}
+      <div className={`room-sidebar ${showSidebar ? "open" : ""}`}>
+
+        {/* Mobile backdrop */}
+        {showSidebar && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setShowSidebar(false)}
+          />
+        )}
+
+        {/* Sidebar header */}
+        <div className="sidebar-header">
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: "18px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "-0.02em" }}>
+              Hangout
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowJoin(true)}
+              className="header-icon-btn"
+              title="Join room"
+            >
+              <DoorOpen className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="header-icon-btn"
+              title="Create room"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* ══════════ HEADER ══════════ */}
-      <header className="shrink-0 px-3 pt-3">
-        <div
-          className="flex items-center gap-2 rounded-[1.6rem] px-3 py-2.5"
-          style={{
-            background: "rgba(16,25,42,0.85)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            backdropFilter: "blur(20px)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-          }}
-        >
-          {/* Back */}
+        {/* Search bar */}
+        <div className="px-3 pt-3 pb-2 shrink-0">
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-full"
+            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            <Search className="w-3.5 h-3.5 shrink-0" style={{ color: "rgba(255,255,255,0.3)" }} />
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.28)" }}>Search rooms…</span>
+          </div>
+        </div>
+
+        {/* Room list */}
+        <div className="flex-1 overflow-y-auto py-1">
+          {rooms.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2">
+              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)" }}>No rooms yet</p>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="px-3 py-1.5 rounded-xl text-white text-xs font-semibold"
+                style={{ background: "rgba(196,107,74,0.2)", border: "1px solid rgba(196,107,74,0.3)" }}
+              >
+                Create one
+              </button>
+            </div>
+          ) : (
+            rooms.map(room => {
+              const isActive = room.roomId?.toUpperCase() === roomId?.toUpperCase();
+              const memberCount = room.members?.length || 0;
+              return (
+                <div
+                  key={room._id}
+                  className={`room-item ${isActive ? "active" : ""}`}
+                  onClick={() => handleRoomClick(room)}
+                >
+                  <div className="room-item-avatar">
+                    {room.name?.[0]?.toUpperCase()}
+                    {/* show dot if any member online */}
+                    {room.members?.some(m => m.user?.status === "online") && (
+                      <div className="online-dot" />
+                    )}
+                  </div>
+                  <div className="room-item-body">
+                    <div className="room-item-name">{room.name}</div>
+                    <div className="room-item-preview">{memberCount} member{memberCount !== 1 ? "s" : ""} · #{room.roomId}</div>
+                  </div>
+                  <div className="room-item-meta">
+                    {isActive && (
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ background: "var(--c-accent)" }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Bottom nav */}
+        <div className="sidebar-bottom-nav">
           <button
+            className="sidebar-nav-btn active"
+            onClick={() => navigate("/rooms")}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            Chats
+          </button>
+          <button
+            className="sidebar-nav-btn"
+            onClick={() => setShowVoiceChat(v => !v)}
+          >
+            <Mic className="w-5 h-5" />
+            Voice
+          </button>
+          <button
+            className="sidebar-nav-btn"
+            onClick={() => setShowGames(v => !v)}
+          >
+            <Gamepad2 className="w-5 h-5" />
+            Games
+          </button>
+          <button
+            className="sidebar-nav-btn"
+            onClick={() => navigate("/profile")}
+          >
+            <Avatar user={user} size="xs" />
+            Profile
+          </button>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════
+          RIGHT CHAT PANEL
+          ══════════════════════════════════════════ */}
+      <div className="room-chat">
+
+        {/* Reconnecting banner */}
+        {!socketOk && (
+          <div className="reconnect-banner">
+            <WifiOff className="w-3.5 h-3.5" />
+            Reconnecting to chat…
+          </div>
+        )}
+
+        {/* ── Chat Header ── */}
+        <div className="chat-header">
+          {/* Mobile: hamburger */}
+          <button
+            className="header-icon-btn md:hidden"
+            onClick={() => setShowSidebar(true)}
+            aria-label="Open sidebar"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+
+          {/* Back (desktop) */}
+          <button
+            className="header-icon-btn hidden md:flex"
             onClick={() => navigate("/rooms")}
             aria-label="Back to rooms"
             title="Back to rooms"
-            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl text-white/50 hover:text-white/90 hover:bg-white/8 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          {/* Room identity */}
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="relative shrink-0">
-              <div className="w-10 h-10 rounded-2xl flex items-center justify-center font-display text-lg text-white shadow-[0_6px_20px_rgba(196,107,74,0.3)]"
-                style={{ background: "linear-gradient(135deg,#c46b4a,#8d3d28)" }}>
-                {currentRoom?.name?.[0]?.toUpperCase()}
-              </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 bg-green-400"
-                style={{ borderColor: "#10192a" }} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">Room</p>
-              <h1 className="font-display text-[1.2rem] leading-none truncate text-white/90">
-                {currentRoom?.name}
-              </h1>
-              <p className="text-[11px] text-white/35 mt-0.5">
-                {currentRoom?.members?.length || 0} members
-              </p>
-            </div>
+          {/* Room avatar */}
+          <div className="chat-header-avatar">
+            {currentRoom?.name?.[0]?.toUpperCase()}
+            <div className="online-dot" />
           </div>
 
-          {/* Nav pills */}
-          <div className="flex items-center gap-0.5 rounded-full p-1" style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <NavBtn icon={Palette}   label="Theme"  onClick={() => setShowBgSelector(true)}  active={false} />
-            <NavBtn icon={Gamepad2}  label="Games"  onClick={() => setShowGames(v => !v)}     active={showGames} />
-            <NavBtn icon={Mic}       label="Voice"  onClick={() => setShowVoiceChat(v => !v)} active={showVoiceChat} tone="green" />
-            <NavBtn icon={Users}     label="People" onClick={() => setShowMembers(v => !v)}   active={showMembers} />
+          {/* Room info */}
+          <div className="flex-1 min-w-0">
+            <h1
+              className="truncate leading-tight"
+              style={{ fontSize: "15px", fontWeight: 700, color: "rgba(255,255,255,0.92)", letterSpacing: "-0.015em" }}
+            >
+              {currentRoom?.name}
+            </h1>
+            <p style={{ fontSize: "11.5px", color: "rgba(45,212,191,0.75)", lineHeight: 1, marginTop: "2px" }}>
+              {currentRoom?.members?.length || 0} members · Active now
+            </p>
           </div>
 
-          {/* Profile button */}
-          <button
-            onClick={() => navigate("/profile")}
-            title="Your profile"
-            aria-label="Your profile"
-            className="hidden sm:flex items-center gap-2 h-9 pl-1 pr-3 rounded-full hover:bg-white/8 transition-colors"
-          >
-            <Avatar user={user} size="sm" />
-            <span className="text-[12px] font-medium max-w-[80px] truncate text-white/70">{user?.username}</span>
-          </button>
-
-          {/* ⋯ Settings dropdown */}
-          <div className="relative shrink-0">
+          {/* Action icons */}
+          <div className="chat-header-actions">
             <button
-              onClick={() => setShowSettings(v => !v)}
-              aria-label="Room settings"
-              title="Room settings"
-              className="w-9 h-9 flex items-center justify-center rounded-2xl text-white/40 hover:text-white/80 hover:bg-white/8 transition-colors"
+              className={`header-icon-btn ${showBgSelector ? "active" : ""}`}
+              onClick={() => setShowBgSelector(true)}
+              title="Chat theme"
             >
-              <MoreVertical className="w-4 h-4" />
+              <Palette className="w-4 h-4" />
             </button>
-            <AnimatePresence>
-              {showSettings && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.93, y: -6 }}
-                  animate={{ opacity: 1, scale: 1,    y: 0  }}
-                  exit={{   opacity: 0, scale: 0.93, y: -6  }}
-                  transition={{ duration: 0.14 }}
-                  className="absolute right-0 top-full mt-2 w-44 rounded-2xl overflow-hidden z-50 shadow-2xl"
-                  style={{ background: "#10192a", border: "1px solid rgba(255,255,255,0.09)" }}
-                >
-                  <button
-                    onClick={() => { setShowSettings(false); setConfirmLeave(true); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/6 hover:text-white transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Leave Room
-                  </button>
-                  {isAdmin && (
-                    <button
-                      onClick={() => { setShowSettings(false); setConfirmDelete(true); }}
-                      className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete Room
-                    </button>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </header>
-
-      {/* ══════════ BODY ══════════ */}
-      <div className="flex-1 flex overflow-hidden mt-2 mx-3 mb-3 gap-3">
-
-        {/* Chat column */}
-        <div
-          className="flex-1 flex flex-col rounded-3xl overflow-hidden min-w-0"
-          style={{ background: "rgba(10,18,30,0.6)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)" }}
-        >
-          {/* Messages */}
-          <div className="flex-1 relative overflow-hidden" role="log" aria-live="polite" aria-label="Messages" style={getBgStyle(chatBg)}>
-            {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center gap-3 text-white/30 text-sm">
-                <span className="text-4xl">💬</span>
-                <p>No messages yet. Say hi!</p>
-              </div>
-            ) : (
-              <Virtuoso
-                ref={virtuosoRef}
-                data={rows}
-                followOutput="smooth"
-                atBottomStateChange={setAtBottom}
-                style={{ height: "100%" }}
-                itemContent={(_, row) => {
-                  if (row.type === "day") return (
-                    <div key={row.id} className="day-divider px-6 py-2">
-                      <span>{row.label}</span>
-                    </div>
-                  );
-                  return (
-                    <div
-                      key={row.id}
-                      className="px-4 py-[2px]"
-                      style={{ paddingTop: row.isFirst ? "10px" : "2px" }}
-                    >
-                      <Message
-                        message={row.msg}
-                        currentUser={user}
-                        isFirst={row.isFirst}
-                        onReaction={handleReaction}
-                        onDeleted={handleDeleted}
-                        onReply={handleReply}
-                      />
-                    </div>
-                  );
-                }}
-                components={{
-                  Footer: () => (
-                    <div>
-                      {/* Typing indicator */}
-                      {typingUsers.size > 0 && (
-                        <div className="flex items-center gap-2 px-6 py-2 text-[12px] text-white/40">
-                          <span className="flex gap-1">
-                            {[0,1,2].map(i => <span key={i} className={`typing-dot w-1.5 h-1.5 rounded-full bg-accent/60`} />)}
-                          </span>
-                          {Array.from(typingUsers).join(", ")} {typingUsers.size === 1 ? "is" : "are"} typing
-                        </div>
-                      )}
-                      {/* Voice call card */}
-                      {voiceCallCard && (
-                        <div className="mx-4 my-3 flex justify-center">
-                          <div className={`w-full max-w-sm rounded-3xl p-4 flex flex-col gap-3 border ${voiceCallCard.active ? "bg-emerald-950/80 border-emerald-400/30" : "border-white/10"}`} style={{ background: voiceCallCard.active ? undefined : "rgba(16,25,42,0.8)" }}>
-                            <div className="flex items-center gap-3">
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center ${voiceCallCard.active ? "bg-emerald-400/15" : "bg-white/5"}`}>
-                                <Phone className={`w-4 h-4 ${voiceCallCard.active ? "text-emerald-300" : "text-white/40"}`} />
-                              </div>
-                              <div>
-                                <p className="text-[13px] font-medium text-white/80">
-                                  {voiceCallCard.active ? `${voiceCallCard.username} started a voice call` : "Voice call ended"}
-                                </p>
-                                {voiceCallCard.active && (
-                                  <p className="text-[11px] text-white/40">{voiceCallCard.participantCount} participant{voiceCallCard.participantCount > 1 ? "s" : ""}</p>
-                                )}
-                              </div>
-                            </div>
-                            {voiceCallCard.active && (
-                              <button onClick={() => setShowVoiceChat(true)}
-                                className="w-full py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white text-[13px] font-semibold flex items-center justify-center gap-2">
-                                <Phone className="w-3.5 h-3.5" /> Join Voice Chat
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      <div style={{ height: 8 }} />
-                    </div>
-                  ),
-                }}
-              />
-            )}
-
-            {/* Jump to latest */}
-            {!atBottom && (
-              <motion.button
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                onClick={scrollToBottom}
-                className="jump-btn"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-                Jump to latest
-              </motion.button>
-            )}
-          </div>
-
-          {/* Voice panel (inline strip) */}
-          {showVoiceChat && (
-            <Suspense fallback={null}>
-              <VoiceChat roomId={roomId} onClose={() => setShowVoiceChat(false)} />
-            </Suspense>
-          )}
-
-          {/* ── Input area ── */}
-          <div
-            className="shrink-0 px-3 pb-3 pt-2"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-          >
-            {/* Reply bar */}
-            <AnimatePresence>
-              {replyTo && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 6 }}
-                  className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl"
-                  style={{ background: "rgba(196,107,74,0.1)", border: "1px solid rgba(196,107,74,0.2)" }}
-                >
-                  <Reply className="w-3.5 h-3.5 text-accent shrink-0" />
-                  <div className="flex-1 min-w-0 text-[11px]">
-                    <span className="font-semibold text-accent">{replyTo.sender?.username}</span>
-                    <span className="ml-1.5 text-white/45">{replyTo.content?.slice(0, 70)}</span>
-                  </div>
-                  <button onClick={() => setReplyTo(null)} className="text-white/35 hover:text-white/70"><X className="w-3.5 h-3.5" /></button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Mention dropdown */}
-            <AnimatePresence>
-              {showMentions && mentionSuggestions.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  className="mb-2 rounded-xl overflow-hidden"
-                  style={{ background: "#10192a", border: "1px solid rgba(255,255,255,0.09)" }}
-                >
-                  {mentionSuggestions.map(u => (
-                    <button key={u}
-                      onMouseDown={e => { e.preventDefault(); handleMentionSelect(u); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/6 text-left text-[13px]"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-accent/20 text-accent text-[11px] font-bold flex items-center justify-center shrink-0">
-                        {u[0].toUpperCase()}
-                      </div>
-                      @{u}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Input row */}
-            <form onSubmit={handleSend}
-              className="flex items-end gap-2 rounded-2xl p-2"
-              style={{ background: "rgba(16,25,42,0.8)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}
+            <button
+              className={`header-icon-btn ${showGames ? "active" : ""}`}
+              onClick={() => setShowGames(v => !v)}
+              title="Games"
             >
-              {/* Attach */}
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                aria-label="Upload file" title="Upload file"
-                className="p-2 rounded-xl text-white/40 hover:text-white/80 hover:bg-white/8 disabled:opacity-30 transition-colors shrink-0">
-                <Paperclip className="w-4.5 h-4.5" />
-              </button>
-              <input ref={fileInputRef} type="file" onChange={handleFile} className="hidden"
-                accept="image/*,video/*,.pdf,.doc,.docx,.txt,.gif" />
+              <Gamepad2 className="w-4 h-4" />
+            </button>
+            <button
+              className={`header-icon-btn ${showVoiceChat ? "active" : ""}`}
+              style={showVoiceChat ? { color: "#34d399", background: "rgba(52,211,153,0.12)" } : {}}
+              onClick={() => setShowVoiceChat(v => !v)}
+              title="Voice chat"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+            <button
+              className={`header-icon-btn ${showMembers ? "active" : ""}`}
+              onClick={() => setShowMembers(v => !v)}
+              title="Members"
+            >
+              <Users className="w-4 h-4" />
+            </button>
 
-              {/* Textarea */}
-              <div className="flex-1 relative">
-                <textarea
-                  ref={textareaRef}
-                  value={newMessage}
-                  onChange={e => { setNewMessage(e.target.value); handleTyping(e.target.value); }}
-                  onKeyDown={e => {
-                    if (e.key === "Escape") { setReplyTo(null); setShowMentions(false); }
-                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); }
-                  }}
-                  placeholder={replyTo ? `Reply to ${replyTo.sender?.username}…` : "Message… (``` code, @ mention, Shift+Enter new line)"}
-                  rows={1}
-                  aria-label="Message input"
-                  className="auto-grow w-full px-3 py-2 bg-transparent text-primary text-[14px] leading-relaxed focus:outline-none placeholder:text-white/25"
-                />
-                {/* Emoji picker */}
-                {showEmojiPicker && (
-                  <Suspense fallback={null}>
-                    <EmojiPicker
-                      onSelect={emoji => setNewMessage(p => p + emoji)}
-                      onClose={() => setShowEmojiPicker(false)}
-                    />
-                  </Suspense>
+            {/* ⋯ Settings */}
+            <div className="relative">
+              <button
+                className="header-icon-btn"
+                onClick={() => setShowSettings(v => !v)}
+                aria-label="Room settings"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              <AnimatePresence>
+                {showSettings && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.93, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.93, y: -6 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute right-0 top-full mt-2 w-44 rounded-2xl overflow-hidden z-50 shadow-2xl"
+                    style={{ background: "#0a1e30", border: "1px solid rgba(255,255,255,0.09)" }}
+                  >
+                    <button
+                      onClick={() => { setShowSettings(false); setConfirmLeave(true); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/6 hover:text-white transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" /> Leave Room
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => { setShowSettings(false); setConfirmDelete(true); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" /> Delete Room
+                      </button>
+                    )}
+                  </motion.div>
                 )}
-              </div>
-
-              {/* Emoji toggle */}
-              <button type="button" onClick={() => setShowEmojiPicker(v => !v)}
-                aria-label="Emoji picker" title="Emoji picker"
-                className={`p-2 rounded-xl transition-colors shrink-0 ${showEmojiPicker ? "bg-accent/20 text-accent" : "text-white/40 hover:text-white/80 hover:bg-white/8"}`}>
-                <Smile className="w-4.5 h-4.5" />
-              </button>
-
-              {/* Send */}
-              <button type="submit"
-                disabled={!newMessage.trim() || uploading}
-                aria-label="Send message"
-                title="Send message"
-                className="p-2 rounded-xl bg-accent hover:bg-accent-hover text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
-                <Send className="w-4.5 h-4.5" />
-              </button>
-            </form>
-
-            {uploading && (
-              <p className="mt-1.5 text-[11px] text-white/35 flex items-center gap-1.5 px-1">
-                <span className="w-3 h-3 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
-                Uploading…
-              </p>
-            )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
-        {/* Members panel */}
-        <AnimatePresence>
-          {showMembers && (
-            <MembersSidebar room={currentRoom} onClose={() => setShowMembers(false)} />
-          )}
-        </AnimatePresence>
+        {/* ── Body ── */}
+        <div className="flex-1 flex overflow-hidden gap-0">
 
-        {/* Games panel */}
-        <AnimatePresence>
-          {showGames && (
-            <Suspense fallback={<div className="w-80 rounded-3xl skeleton" />}>
-              <GamesPanel roomId={roomId} onClose={() => setShowGames(false)} />
-            </Suspense>
-          )}
-        </AnimatePresence>
+          {/* Chat column */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+
+            {/* Messages */}
+            <div
+              className="flex-1 relative overflow-hidden"
+              role="log"
+              aria-live="polite"
+              aria-label="Messages"
+              style={getBgStyle(chatBg)}
+            >
+              {messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center gap-3" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  <span style={{ fontSize: "40px" }}>💬</span>
+                  <p style={{ fontSize: "14px" }}>No messages yet. Say hi!</p>
+                </div>
+              ) : (
+                <Virtuoso
+                  ref={virtuosoRef}
+                  data={rows}
+                  followOutput="smooth"
+                  atBottomStateChange={setAtBottom}
+                  style={{ height: "100%" }}
+                  itemContent={(_, row) => {
+                    if (row.type === "day") return (
+                      <div key={row.id} className="day-divider px-6 py-2">
+                        <span>{row.label}</span>
+                      </div>
+                    );
+                    return (
+                      <div
+                        key={row.id}
+                        className="px-4"
+                        style={{ paddingTop: row.isFirst ? "10px" : "2px", paddingBottom: "2px" }}
+                      >
+                        <Message
+                          message={row.msg}
+                          currentUser={user}
+                          isFirst={row.isFirst}
+                          onReaction={handleReaction}
+                          onDeleted={handleDeleted}
+                          onReply={handleReply}
+                        />
+                      </div>
+                    );
+                  }}
+                  components={{
+                    Footer: () => (
+                      <div>
+                        {typingUsers.size > 0 && (
+                          <div className="flex items-center gap-2 px-6 py-2" style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+                            <span className="flex gap-1">
+                              {[0,1,2].map(i => <span key={i} className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: "var(--c-accent)" }} />)}
+                            </span>
+                            {Array.from(typingUsers).join(", ")} {typingUsers.size === 1 ? "is" : "are"} typing
+                          </div>
+                        )}
+                        {voiceCallCard && (
+                          <div className="mx-4 my-3 flex justify-center">
+                            <div
+                              className="w-full max-w-sm rounded-3xl p-4 flex flex-col gap-3"
+                              style={{
+                                background: voiceCallCard.active ? "rgba(5,60,45,0.8)" : "rgba(10,30,48,0.8)",
+                                border: `1px solid ${voiceCallCard.active ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.1)"}`,
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-9 h-9 rounded-full flex items-center justify-center"
+                                  style={{ background: voiceCallCard.active ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.05)" }}
+                                >
+                                  <Phone className="w-4 h-4" style={{ color: voiceCallCard.active ? "#34d399" : "rgba(255,255,255,0.4)" }} />
+                                </div>
+                                <div>
+                                  <p style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.8)" }}>
+                                    {voiceCallCard.active ? `${voiceCallCard.username} started a voice call` : "Voice call ended"}
+                                  </p>
+                                  {voiceCallCard.active && (
+                                    <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>{voiceCallCard.participantCount} participant{voiceCallCard.participantCount > 1 ? "s" : ""}</p>
+                                  )}
+                                </div>
+                              </div>
+                              {voiceCallCard.active && (
+                                <button
+                                  onClick={() => setShowVoiceChat(true)}
+                                  className="w-full py-2.5 rounded-2xl text-white font-semibold flex items-center justify-center gap-2"
+                                  style={{ background: "#34d399", fontSize: "13px" }}
+                                >
+                                  <Phone className="w-3.5 h-3.5" /> Join Voice Chat
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ height: 8 }} />
+                      </div>
+                    ),
+                  }}
+                />
+              )}
+
+              {/* Jump to latest */}
+              {!atBottom && (
+                <motion.button
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  onClick={scrollToBottom}
+                  className="jump-btn"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  Jump to latest
+                </motion.button>
+              )}
+            </div>
+
+            {/* Voice panel strip */}
+            {showVoiceChat && (
+              <Suspense fallback={null}>
+                <VoiceChat roomId={roomId} onClose={() => setShowVoiceChat(false)} />
+              </Suspense>
+            )}
+
+            {/* ── Composer ── */}
+            <div className="composer-wrap">
+              {/* Reply bar */}
+              <AnimatePresence>
+                {replyTo && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 6 }}
+                    className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl"
+                    style={{ background: "rgba(196,107,74,0.1)", border: "1px solid rgba(196,107,74,0.2)" }}
+                  >
+                    <Reply className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--c-accent)" }} />
+                    <div className="flex-1 min-w-0" style={{ fontSize: "11px" }}>
+                      <span className="font-semibold" style={{ color: "var(--c-accent)" }}>{replyTo.sender?.username}</span>
+                      <span className="ml-1.5" style={{ color: "rgba(255,255,255,0.45)" }}>{replyTo.content?.slice(0, 70)}</span>
+                    </div>
+                    <button onClick={() => setReplyTo(null)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Mention dropdown */}
+              <AnimatePresence>
+                {showMentions && mentionSuggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    className="mb-2 rounded-xl overflow-hidden"
+                    style={{ background: "#0a1e30", border: "1px solid rgba(255,255,255,0.09)" }}
+                  >
+                    {mentionSuggestions.map(u => (
+                      <button key={u}
+                        onMouseDown={e => { e.preventDefault(); handleMentionSelect(u); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/6 text-left"
+                        style={{ fontSize: "13px" }}
+                      >
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                          style={{ background: "rgba(196,107,74,0.2)", color: "var(--c-accent)", fontSize: "11px", fontWeight: 700 }}
+                        >
+                          {u[0].toUpperCase()}
+                        </div>
+                        @{u}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Input row */}
+              <div className="composer-row">
+                {/* Attach */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="composer-icon-btn"
+                  aria-label="Upload file"
+                  title="Upload file"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFile}
+                  className="hidden"
+                  accept="image/*,video/*,.pdf,.doc,.docx,.txt,.gif"
+                />
+
+                {/* Input pill */}
+                <form
+                  onSubmit={handleSend}
+                  className="composer-input-wrap flex-1"
+                >
+                  {/* Emoji picker (inside form for position) */}
+                  {showEmojiPicker && (
+                    <Suspense fallback={null}>
+                      <div className="absolute bottom-full right-0 pb-2 z-30">
+                        <EmojiPicker
+                          onSelect={emoji => setNewMessage(p => p + emoji)}
+                          onClose={() => setShowEmojiPicker(false)}
+                        />
+                      </div>
+                    </Suspense>
+                  )}
+
+                  <textarea
+                    ref={textareaRef}
+                    value={newMessage}
+                    onChange={e => { setNewMessage(e.target.value); handleTyping(e.target.value); }}
+                    onKeyDown={e => {
+                      if (e.key === "Escape") { setReplyTo(null); setShowMentions(false); }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); }
+                    }}
+                    placeholder={replyTo ? `Reply to ${replyTo.sender?.username}…` : "Send a message…"}
+                    rows={1}
+                    aria-label="Message input"
+                  />
+
+                  {/* Emoji button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(v => !v)}
+                    aria-label="Emoji"
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors"
+                    style={{ color: showEmojiPicker ? "var(--c-accent)" : "rgba(255,255,255,0.35)" }}
+                  >
+                    <Smile className="w-4.5 h-4.5" />
+                  </button>
+                </form>
+
+                {/* Send */}
+                <button
+                  onClick={handleSend}
+                  disabled={!newMessage.trim() || uploading}
+                  className="composer-send-btn"
+                  aria-label="Send message"
+                  title="Send message"
+                >
+                  <Send className="w-[18px] h-[18px]" />
+                </button>
+              </div>
+
+              {uploading && (
+                <p className="mt-1.5 flex items-center gap-1.5 px-1" style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>
+                  <span className="w-3 h-3 rounded-full border-2 border-t-accent animate-spin" style={{ borderColor: "rgba(196,107,74,0.3)", borderTopColor: "var(--c-accent)" }} />
+                  Uploading…
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Members panel */}
+          <AnimatePresence>
+            {showMembers && (
+              <MembersSidebar room={currentRoom} onClose={() => setShowMembers(false)} />
+            )}
+          </AnimatePresence>
+
+          {/* Games panel */}
+          <AnimatePresence>
+            {showGames && (
+              <Suspense fallback={<div className="w-80 rounded-3xl skeleton" />}>
+                <GamesPanel roomId={roomId} onClose={() => setShowGames(false)} />
+              </Suspense>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* ── Modals ── */}
@@ -806,6 +997,11 @@ const Room = () => {
             onClose={() => setShowBgSelector(false)}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCreate && <CreateRoomModal onClose={() => setShowCreate(false)} />}
+        {showJoin   && <JoinRoomModal   onClose={() => setShowJoin(false)} />}
       </AnimatePresence>
 
       <ConfirmModal
@@ -831,4 +1027,3 @@ const Room = () => {
 };
 
 export default Room;
-
