@@ -1,128 +1,89 @@
-import { motion, AnimatePresence } from 'framer-motion';
+﻿import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, X, Check } from 'lucide-react';
 
-// ── Theme definitions ─────────────────────────────────────────────────────────
-// Using inline `style` objects so Tailwind purge never strips them.
+// ── Enhanced Theme definitions with modern gradients ──────────────────────────
 export const backgrounds = [
   {
     id: 'default',
     name: 'Void',
     emoji: '🌑',
-    style: { background: '#110e12' },
-    previewStyle: { background: 'linear-gradient(135deg,#1a151b 0%,#110e12 100%)' },
+    style: { background: '#0a0e14' },
+    previewStyle: { background: 'linear-gradient(135deg,#0a0e14 0%,#1a1520 100%)' },
   },
   {
-    id: 'midnight-blue',
-    name: 'Midnight',
+    id: 'midnight-ocean',
+    name: 'Midnight Ocean',
     emoji: '🌊',
-    style: { background: 'linear-gradient(160deg, #060d1f 0%, #0a1628 40%, #0d0f1a 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#060d1f,#0d1f3c)' },
+    style: { 
+      background: 'linear-gradient(160deg, #0a1628 0%, #1a2f45 30%, #0f1f35 70%, #08121f 100%)',
+      backgroundAttachment: 'fixed'
+    },
+    previewStyle: { background: 'linear-gradient(135deg,#0a1628,#1a2f45,#0f1f35)' },
   },
   {
-    id: 'aurora',
+    id: 'aurora-borealis',
     name: 'Aurora',
     emoji: '🌌',
     style: {
-      background: 'linear-gradient(160deg, #0d0f1f 0%, #0f1a2e 30%, #0d1a1a 60%, #0a0f0a 100%)',
+      background: 'linear-gradient(160deg, #0d1f2f 0%, #1a2d45 20%, #2a3f5f 40%, #1a2535 70%, #0a1520 100%)',
+      backgroundAttachment: 'fixed'
     },
-    previewStyle: { background: 'linear-gradient(135deg,#0d0f1f,#0a2a1a,#1a0a2a)' },
+    previewStyle: { background: 'linear-gradient(135deg,#0d1f2f,#2a3f5f,#1a2535)' },
   },
   {
-    id: 'ember',
-    name: 'Ember',
-    emoji: '🔥',
-    style: { background: 'linear-gradient(160deg, #1a0a05 0%, #1f0d08 40%, #120909 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#2a1005,#1f0d08,#120505)' },
+    id: 'purple-haze',
+    name: 'Purple Haze',
+    emoji: '💜',
+    style: { 
+      background: 'linear-gradient(160deg, #1a0f2e 0%, #2d1b4e 30%, #1f1535 70%, #0f0a1a 100%)',
+      backgroundAttachment: 'fixed'
+    },
+    previewStyle: { background: 'linear-gradient(135deg,#1a0f2e,#2d1b4e,#1f1535)' },
   },
   {
-    id: 'galaxy',
-    name: 'Galaxy',
-    emoji: '✨',
-    style: { background: 'linear-gradient(160deg, #0d0a1f 0%, #15102a 40%, #0d0d1a 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#0d0a1f,#15102a,#0a0a0d)' },
-  },
-  {
-    id: 'forest',
+    id: 'emerald-forest',
     name: 'Forest',
-    emoji: '🌿',
-    style: { background: 'linear-gradient(160deg, #050e08 0%, #081409 40%, #060e08 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#050e08,#0a1f0d,#040906)' },
+    emoji: '🌲',
+    style: { 
+      background: 'linear-gradient(160deg, #0a1f0f 0%, #1a3525 30%, #0f2518 70%, #05120a 100%)',
+      backgroundAttachment: 'fixed'
+    },
+    previewStyle: { background: 'linear-gradient(135deg,#0a1f0f,#1a3525,#0f2518)' },
   },
   {
-    id: 'rose-dark',
-    name: 'Rose Noir',
-    emoji: '🌹',
-    style: { background: 'linear-gradient(160deg, #1a070e 0%, #200a12 40%, #130709 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#1a070e,#200a12,#0d0407)' },
+    id: 'sunset-blaze',
+    name: 'Sunset',
+    emoji: '🌅',
+    style: { 
+      background: 'linear-gradient(160deg, #2a1510 0%, #451f15 30%, #2f1812 70%, #1a0f08 100%)',
+      backgroundAttachment: 'fixed'
+    },
+    previewStyle: { background: 'linear-gradient(135deg,#2a1510,#451f15,#2f1812)' },
   },
   {
-    id: 'slate',
-    name: 'Slate',
-    emoji: '🩶',
-    style: { background: 'linear-gradient(160deg, #0a0c10 0%, #0f1217 40%, #0c0e12 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#0a0c10,#141820,#0a0c10)' },
+    id: 'cosmic-nebula',
+    name: 'Nebula',
+    emoji: '✨',
+    style: { 
+      background: 'linear-gradient(160deg, #1f0a2e 0%, #3f1a5f 30%, #2a1545 70%, #15082a 100%)',
+      backgroundAttachment: 'fixed'
+    },
+    previewStyle: { background: 'linear-gradient(135deg,#1f0a2e,#3f1a5f,#2a1545)' },
   },
   {
-    id: 'grid',
-    name: 'Grid',
-    emoji: '⬛',
-    style: {
-      backgroundColor: '#0d0d0d',
-      backgroundImage:
-        'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-      backgroundSize: '40px 40px',
+    id: 'arctic-frost',
+    name: 'Arctic',
+    emoji: '❄️',
+    style: { 
+      background: 'linear-gradient(160deg, #0f1f2f 0%, #1a3545 30%, #0f2535 70%, #0a1520 100%)',
+      backgroundAttachment: 'fixed'
     },
-    previewStyle: {
-      backgroundColor: '#0d0d0d',
-      backgroundImage:
-        'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
-      backgroundSize: '20px 20px',
-    },
-  },
-  {
-    id: 'dots',
-    name: 'Cosmos',
-    emoji: '🔮',
-    style: {
-      backgroundColor: '#0a090f',
-      backgroundImage: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)',
-      backgroundSize: '22px 22px',
-    },
-    previewStyle: {
-      backgroundColor: '#0a090f',
-      backgroundImage: 'radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1px)',
-      backgroundSize: '12px 12px',
-    },
-  },
-  {
-    id: 'warm-dark',
-    name: 'Walnut',
-    emoji: '🪵',
-    style: { background: 'linear-gradient(160deg, #120e08 0%, #1a1208 40%, #110e07 100%)' },
-    previewStyle: { background: 'linear-gradient(135deg,#120e08,#1a1208,#0d0b06)' },
-  },
-  {
-    id: 'cyber',
-    name: 'Cyber',
-    emoji: '⚡',
-    style: {
-      backgroundColor: '#060811',
-      backgroundImage:
-        'linear-gradient(rgba(0,180,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,180,255,0.025) 1px, transparent 1px)',
-      backgroundSize: '50px 50px',
-    },
-    previewStyle: {
-      backgroundColor: '#060811',
-      backgroundImage:
-        'linear-gradient(rgba(0,180,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,180,255,0.07) 1px, transparent 1px)',
-      backgroundSize: '20px 20px',
-    },
+    previewStyle: { background: 'linear-gradient(135deg,#0f1f2f,#1a3545,#0f2535)' },
   },
 ];
 
-// ── Helper to get a background's style by id ──────────────────────────────────
 export function getBgStyle(id) {
-  return backgrounds.find((b) => b.id === id)?.style || backgrounds[0].style;
+  return backgrounds.find(b => b.id === id)?.style || backgrounds[0].style;
 }
 
 // ── BackgroundSelector modal ──────────────────────────────────────────────────
@@ -132,109 +93,117 @@ const BackgroundSelector = ({ currentBackground, onChange, onClose }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)' }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)' }}
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.93, opacity: 0, y: 12 }}
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.93, opacity: 0, y: 12 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-        className="w-full max-w-lg max-h-[82vh] overflow-hidden rounded-2xl flex flex-col"
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+        className="w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-3xl flex flex-col"
         style={{
-          background: 'rgba(20,16,22,0.97)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
+          background: 'linear-gradient(135deg, rgba(20,25,40,0.98) 0%, rgba(15,18,30,0.99) 100%)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.8)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.08]">
           <div className="flex items-center gap-3">
             <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(196,107,74,0.15)', border: '1px solid rgba(196,107,74,0.25)' }}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(100,180,255,0.2), rgba(80,150,220,0.3))',
+                border: '1px solid rgba(100,180,255,0.3)',
+                boxShadow: '0 4px 12px rgba(100,180,255,0.2)'
+              }}
             >
-              <Sparkles className="w-4 h-4" style={{ color: '#c46b4a' }} />
+              <Sparkles className="w-5 h-5" style={{ color: '#6495ed' }} />
             </div>
             <div>
-              <p className="text-[13px] font-semibold text-white/90 leading-tight">Chat Theme</p>
-              <p className="text-[11px] text-white/35 leading-tight mt-0.5">Pick your vibe</p>
+              <p className="text-base font-bold text-white/95 leading-tight">Chat Theme</p>
+              <p className="text-xs text-white/40 leading-tight mt-0.5">Choose your vibe</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-white/40 hover:text-white/80 transition-colors"
-            style={{ background: 'rgba(255,255,255,0.05)' }}
+            className="p-2.5 rounded-xl text-white/40 hover:text-white/90 hover:bg-white/8 transition-all"
+            style={{ background: 'rgba(255,255,255,0.03)' }}
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Grid */}
-        <div className="overflow-y-auto p-4" style={{ scrollbarWidth: 'thin' }}>
-          <div className="grid grid-cols-3 gap-3">
+        <div className="overflow-y-auto p-5" style={{ scrollbarWidth: 'thin' }}>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {backgrounds.map((bg) => {
               const isActive = currentBackground === bg.id;
               return (
                 <motion.button
                   key={bg.id}
-                  onClick={() => { onChange(bg.id); onClose(); }}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="relative rounded-xl overflow-hidden text-left group"
+                  onClick={() => { onChange(bg.id); }}
+                  whileHover={{ scale: 1.03, y: -4 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="relative rounded-2xl overflow-hidden text-left group"
                   style={{
                     border: isActive
-                      ? '2px solid rgba(196,107,74,0.8)'
-                      : '2px solid rgba(255,255,255,0.07)',
-                    boxShadow: isActive ? '0 0 16px rgba(196,107,74,0.25)' : 'none',
+                      ? '2.5px solid rgba(100,180,255,0.8)'
+                      : '2px solid rgba(255,255,255,0.1)',
+                    boxShadow: isActive 
+                      ? '0 8px 32px rgba(100,180,255,0.3), 0 0 0 4px rgba(100,180,255,0.1)' 
+                      : '0 4px 12px rgba(0,0,0,0.3)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   }}
                 >
                   {/* Preview swatch */}
                   <div
-                    className="w-full h-20 relative"
+                    className="w-full h-32 relative overflow-hidden"
                     style={bg.previewStyle}
                   >
-                    {/* Fake chat bubbles inside preview */}
-                    <div className="absolute bottom-2 left-2 right-2 flex flex-col gap-1">
-                      <div
-                        className="self-start rounded-lg px-2 py-0.5"
-                        style={{ background: 'rgba(255,255,255,0.12)', width: '55%', height: '8px' }}
-                      />
-                      <div
-                        className="self-end rounded-lg"
-                        style={{ background: 'rgba(196,107,74,0.5)', width: '40%', height: '8px' }}
-                      />
+                    {/* Animated gradient overlay */}
+                    <div 
+                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      style={{ 
+                        background: 'radial-gradient(circle at center, rgba(255,255,255,0.1) 0%, transparent 70%)'
+                      }}
+                    />
+                    
+                    {/* Fake chat bubbles */}
+                    <div className="absolute inset-0 p-3 flex flex-col justify-end gap-2">
+                      <div className="w-24 h-6 rounded-full opacity-40" style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)' }} />
+                      <div className="w-32 h-6 rounded-full opacity-50 self-end" style={{ background: 'rgba(100,180,255,0.3)', backdropFilter: 'blur(4px)' }} />
                     </div>
 
-                    {/* Active checkmark */}
+                    {/* Active check */}
                     {isActive && (
-                      <div
-                        className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
-                        style={{ background: '#c46b4a' }}
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(100,180,255,0.95)', boxShadow: '0 4px 12px rgba(100,180,255,0.5)' }}
                       >
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
+                        <Check className="w-5 h-5 text-white" strokeWidth={3} />
+                      </motion.div>
                     )}
                   </div>
 
                   {/* Label */}
-                  <div
-                    className="px-2.5 py-2 flex items-center gap-1.5"
-                    style={{ background: 'rgba(0,0,0,0.5)' }}
-                  >
-                    <span className="text-[11px]">{bg.emoji}</span>
-                    <span className="text-[11px] font-medium text-white/75 truncate">{bg.name}</span>
+                  <div className="px-3 py-3 bg-black/20 backdrop-blur-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{bg.emoji}</span>
+                      <span className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-white/70'} group-hover:text-white transition-colors`}>
+                        {bg.name}
+                      </span>
+                    </div>
                   </div>
                 </motion.button>
               );
             })}
           </div>
-
-          <p className="text-center text-[10.5px] mt-4 pb-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
-            Saved to your browser — unique per room
-          </p>
         </div>
       </motion.div>
     </motion.div>

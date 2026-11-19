@@ -152,21 +152,28 @@ const Message = ({
   // Sent: dark teal-toned, white text â€” like reference right side
   const bubbleStyle = isOwn
     ? {
-        background: "linear-gradient(135deg, #1e3a4a 0%, #162c3a 100%)",
-        color: "rgba(255,255,255,0.92)",
-        borderRadius: "20px 20px 4px 20px",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+        background: "linear-gradient(135deg, rgba(100,149,237,0.25) 0%, rgba(65,105,225,0.35) 100%)",
+        backdropFilter: "blur(10px)",
+        border: "1px solid rgba(100,180,255,0.2)",
+        color: "rgba(255,255,255,0.95)",
+        borderRadius: "18px 18px 4px 18px",
+        boxShadow: "0 4px 16px rgba(100,149,237,0.2), 0 2px 4px rgba(0,0,0,0.3)",
+        transition: "all 0.3s ease",
       }
     : {
         background: isMentioned
-          ? "rgba(250,230,100,0.08)"
-          : "rgba(220,230,240,0.11)",
+          ? "linear-gradient(135deg, rgba(255,220,100,0.12) 0%, rgba(255,200,80,0.15) 100%)"
+          : "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.03) 100%)",
+        backdropFilter: "blur(10px)",
         border: isMentioned
-          ? "1px solid rgba(250,230,100,0.2)"
-          : "1px solid rgba(255,255,255,0.09)",
-        color: "rgba(255,255,255,0.90)",
-        borderRadius: "20px 20px 20px 4px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          ? "1px solid rgba(255,220,100,0.25)"
+          : "1px solid rgba(255,255,255,0.12)",
+        color: "rgba(255,255,255,0.92)",
+        borderRadius: "18px 18px 18px 4px",
+        boxShadow: isMentioned
+          ? "0 4px 16px rgba(255,220,100,0.15), 0 2px 4px rgba(0,0,0,0.2)"
+          : "0 4px 16px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.15)",
+        transition: "all 0.3s ease",
       };
 
   return (
@@ -215,6 +222,7 @@ const Message = ({
         {/* Bubble */}
         <div className="relative" style={{ maxWidth: "100%" }} onMouseEnter={revealActions} onMouseLeave={scheduleHide}>
           <div
+            className="message-bubble"
             style={{
               ...bubbleStyle,
               padding: "10px 14px",
@@ -422,4 +430,6 @@ export default memo(Message, (prev, next) =>
   prev.currentUser?._id === next.currentUser?._id &&
   prev.isFirst === next.isFirst
 );
+
+
 
