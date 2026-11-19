@@ -1,4 +1,4 @@
-﻿import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import { Trash2, Smile, Download, FileText, Reply, Copy, Check } from "lucide-react";
 import { motion } from "framer-motion";
 import api, { getFileUrl } from "../utils/api";

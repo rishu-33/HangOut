@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect, useState, useRef, useCallback, useMemo, lazy, Suspense
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -408,12 +408,22 @@ const Room = () => {
     virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "smooth" });
   }, []);
 
-  /* ── sidebar room click ── */
+  /* ── sidebar room click (kept for modal-triggered navigation) ── */
   const handleRoomClick = useCallback((room) => {
     setCurrentRoom(room);
     setShowSidebar(false);
     navigate("/room/" + room.roomId);
   }, [setCurrentRoom, navigate]);
+
+  /* ── members sorted: online first ── */
+  const sortedMembers = useMemo(() => {
+    const members = currentRoom?.members || [];
+    return [...members].sort((a, b) => {
+      const ao = a.user?.status === "online" ? 0 : 1;
+      const bo = b.user?.status === "online" ? 0 : 1;
+      return ao - bo;
+    });
+  }, [currentRoom?.members]);
 
   /* ── loading ── */
   if (loading) return (
