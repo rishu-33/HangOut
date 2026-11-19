@@ -1,12 +1,13 @@
-import {
+﻿import {
   useEffect, useState, useRef, useCallback, useMemo, lazy, Suspense
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft, Send, Paperclip, Smile, Users,
-  LogOut, Gamepad2, Mic, Trash2, Phone, Palette, X, Reply,
-  ChevronDown, WifiOff, MoreVertical, Plus, DoorOpen, Menu, Search
+  ArrowLeft, Send, Paperclip, Smile,
+  LogOut, Gamepad2, Mic,
+  Phone, Palette, X, Reply,
+  ChevronDown, WifiOff, Menu, Hash, Copy, Check
 } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
 import useAuthStore from "../store/authStore";
@@ -15,12 +16,9 @@ import { getSocket } from "../utils/socket";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 import Message from "../components/Message";
-import MembersSidebar from "../components/MembersSidebar";
 import Avatar from "../components/Avatar";
 import ConfirmModal from "../components/ConfirmModal";
 import BackgroundSelector, { getBgStyle } from "../components/BackgroundSelector";
-import CreateRoomModal from "../components/CreateRoomModal";
-import JoinRoomModal from "../components/JoinRoomModal";
 
 const GamesPanel  = lazy(() => import("../components/GamesPanel"));
 const VoiceChat   = lazy(() => import("../components/VoiceChat"));
@@ -46,18 +44,6 @@ function dayLabel(iso) {
   return d.toLocaleDateString([], { weekday:"long", month:"short", day:"numeric" });
 }
 
-/* ── Relative time for sidebar ─────────────────────────────────────────── */
-function relTime(iso) {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "now";
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    ROOM PAGE
    ═══════════════════════════════════════════════════════════════════════ */
@@ -77,17 +63,12 @@ const Room = () => {
   const [loading,         setLoading]         = useState(true);
   const [socketOk,        setSocketOk]        = useState(true);
   const [typingUsers,     setTypingUsers]     = useState(new Set());
-  const [showMembers,     setShowMembers]     = useState(false);
   const [showGames,       setShowGames]       = useState(false);
   const [showVoiceChat,   setShowVoiceChat]   = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showBgSelector,  setShowBgSelector]  = useState(false);
-  const [showSettings,    setShowSettings]    = useState(false);
-  const [showSidebar,     setShowSidebar]     = useState(false); // mobile sidebar
+  const [showSidebar,     setShowSidebar]     = useState(false); // mobile
   const [confirmLeave,    setConfirmLeave]    = useState(false);
-  const [confirmDelete,   setConfirmDelete]   = useState(false);
-  const [showCreate,      setShowCreate]      = useState(false);
-  const [showJoin,        setShowJoin]        = useState(false);
   const [chatBg,          setChatBg]          = useState(() =>
     localStorage.getItem(`room-bg-${roomId}`) || "default"
   );
@@ -97,6 +78,8 @@ const Room = () => {
   const [showMentions,    setShowMentions]    = useState(false);
   const [voiceCallCard,   setVoiceCallCard]   = useState(null);
   const [atBottom,        setAtBottom]        = useState(true);
+  const [showRoomId,      setShowRoomId]      = useState(false);
+  const [copied,          setCopied]          = useState(false);
 
   /* ── refs ── */
   const virtuosoRef      = useRef(null);
@@ -104,7 +87,7 @@ const Room = () => {
   const typingTimeoutRef = useRef(null);
   const fileInputRef     = useRef(null);
 
-  /* ── fetch rooms list for sidebar ── */
+  /* ── fetch rooms ── */
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
 
   /* ── load room + messages ── */
@@ -388,32 +371,22 @@ const Room = () => {
   }, [roomId]);
 
   /* ── room actions ── */
-  const isAdmin = Boolean(user?._id) && (
-    String(currentRoom?.creator?._id || currentRoom?.creator) === String(user._id) ||
-    currentRoom?.members?.some(m => String(m.user?._id || m.user) === String(user._id) && m.role === "admin")
-  );
-
   const doLeave  = useCallback(async () => {
     const r = await leaveRoom(roomId);
     if (r.success) { toast.success("Left room"); navigate("/rooms"); }
   }, [leaveRoom, roomId, navigate]);
 
-  const doDelete = useCallback(async () => {
-    const r = await storeDeleteRoom(roomId);
-    if (r.success) { toast.success("Room deleted"); navigate("/rooms"); }
-    else toast.error(r.message || "Failed to delete");
-  }, [storeDeleteRoom, roomId, navigate]);
-
   const scrollToBottom = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: "LAST", behavior: "smooth" });
   }, []);
 
-  /* ── sidebar room click (kept for modal-triggered navigation) ── */
-  const handleRoomClick = useCallback((room) => {
-    setCurrentRoom(room);
-    setShowSidebar(false);
-    navigate("/room/" + room.roomId);
-  }, [setCurrentRoom, navigate]);
+  /* ── copy room ID ── */
+  const handleCopyRoomId = useCallback(() => {
+    navigator.clipboard.writeText(currentRoom?.roomId || roomId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Room ID copied!");
+  }, [currentRoom?.roomId, roomId]);
 
   /* ── members sorted: online first ── */
   const sortedMembers = useMemo(() => {
@@ -424,6 +397,12 @@ const Room = () => {
       return ao - bo;
     });
   }, [currentRoom?.members]);
+
+  /* ── active members only ── */
+  const activeMembers = useMemo(() =>
+    sortedMembers.filter(m => m.user?.status === "online"),
+    [sortedMembers]
+  );
 
   /* ── loading ── */
   if (loading) return (
@@ -438,7 +417,7 @@ const Room = () => {
               <div className="skeleton w-12 h-12 rounded-full shrink-0" />
               <div className="flex flex-col gap-1.5 flex-1">
                 <div className="skeleton h-3.5 w-28 rounded" />
-                <div className="skeleton h-3 w-40 rounded" />
+                <div className="skeleton h-3 w-20 rounded" />
               </div>
             </div>
           ))}
@@ -461,7 +440,7 @@ const Room = () => {
     <div className="room-page">
 
       {/* ══════════════════════════════════════════
-          LEFT SIDEBAR
+          LEFT SIDEBAR - ACTIVE MEMBERS ONLY
           ══════════════════════════════════════════ */}
       <div className={`room-sidebar ${showSidebar ? "open" : ""}`}>
 
@@ -476,81 +455,49 @@ const Room = () => {
         {/* Sidebar header */}
         <div className="sidebar-header">
           <div className="flex items-center gap-2">
-            <span style={{ fontSize: "18px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "-0.02em" }}>
-              Hangout
+            <span style={{ fontSize: "16px", fontWeight: 700, color: "rgba(255,255,255,0.9)", letterSpacing: "-0.02em" }}>
+              Active Members
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setShowJoin(true)}
-              className="header-icon-btn"
-              title="Join room"
-            >
-              <DoorOpen className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="header-icon-btn"
-              title="Create room"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
         </div>
 
-        {/* Search bar */}
-        <div className="px-3 pt-3 pb-2 shrink-0">
-          <div
-            className="flex items-center gap-2 px-3 py-2 rounded-full"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
-          >
-            <Search className="w-3.5 h-3.5 shrink-0" style={{ color: "rgba(255,255,255,0.3)" }} />
-            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.28)" }}>Search rooms…</span>
-          </div>
-        </div>
-
-        {/* Room list */}
-        <div className="flex-1 overflow-y-auto py-1">
-          {rooms.length === 0 ? (
+        {/* Active members list */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {activeMembers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2">
-              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)" }}>No rooms yet</p>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="px-3 py-1.5 rounded-xl text-white text-xs font-semibold"
-                style={{ background: "rgba(196,107,74,0.2)", border: "1px solid rgba(196,107,74,0.3)" }}
-              >
-                Create one
-              </button>
+              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)" }}>No active members</p>
             </div>
           ) : (
-            rooms.map(room => {
-              const isActive = room.roomId?.toUpperCase() === roomId?.toUpperCase();
-              const memberCount = room.members?.length || 0;
+            activeMembers.map(member => {
+              const u = member.user;
               return (
                 <div
-                  key={room._id}
-                  className={`room-item ${isActive ? "active" : ""}`}
-                  onClick={() => handleRoomClick(room)}
+                  key={member._id || u?._id}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors"
                 >
-                  <div className="room-item-avatar">
-                    {room.name?.[0]?.toUpperCase()}
-                    {/* show dot if any member online */}
-                    {room.members?.some(m => m.user?.status === "online") && (
-                      <div className="online-dot" />
-                    )}
+                  <div className="relative shrink-0">
+                    <Avatar user={u} size="md" />
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 bg-green-400"
+                      style={{ borderColor: "#0a1e30" }}
+                    />
                   </div>
-                  <div className="room-item-body">
-                    <div className="room-item-name">{room.name}</div>
-                    <div className="room-item-preview">{memberCount} member{memberCount !== 1 ? "s" : ""} · #{room.roomId}</div>
+                  <div className="flex-1 min-w-0">
+                    <p style={{ fontSize: "14px", fontWeight: 500, color: "rgba(255,255,255,0.88)", lineHeight: 1.3 }}>
+                      {u?.username}
+                    </p>
+                    <p style={{ fontSize: "11px", color: "rgba(52,211,153,0.7)", lineHeight: 1.2, marginTop: "2px" }}>
+                      Active now
+                    </p>
                   </div>
-                  <div className="room-item-meta">
-                    {isActive && (
-                      <div
-                        className="w-2 h-2 rounded-full"
-                        style={{ background: "var(--c-accent)" }}
-                      />
-                    )}
-                  </div>
+                  {member.role === "admin" && (
+                    <span
+                      className="px-2 py-0.5 rounded text-[10px] font-semibold"
+                      style={{ background: "rgba(196,107,74,0.15)", color: "#c46b4a" }}
+                    >
+                      ADMIN
+                    </span>
+                  )}
                 </div>
               );
             })
@@ -621,7 +568,7 @@ const Room = () => {
             className="header-icon-btn hidden md:flex"
             onClick={() => navigate("/rooms")}
             aria-label="Back to rooms"
-            title="Back to rooms"
+            title="Back"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -632,20 +579,17 @@ const Room = () => {
             <div className="online-dot" />
           </div>
 
-          {/* Room info */}
+          {/* Room name only */}
           <div className="flex-1 min-w-0">
             <h1
               className="truncate leading-tight"
-              style={{ fontSize: "15px", fontWeight: 700, color: "rgba(255,255,255,0.92)", letterSpacing: "-0.015em" }}
+              style={{ fontSize: "16px", fontWeight: 700, color: "rgba(255,255,255,0.92)", letterSpacing: "-0.015em" }}
             >
               {currentRoom?.name}
             </h1>
-            <p style={{ fontSize: "11.5px", color: "rgba(45,212,191,0.75)", lineHeight: 1, marginTop: "2px" }}>
-              {currentRoom?.members?.length || 0} members · Active now
-            </p>
           </div>
 
-          {/* Action icons */}
+          {/* Action icons: Theme, Room ID, Leave */}
           <div className="chat-header-actions">
             <button
               className={`header-icon-btn ${showBgSelector ? "active" : ""}`}
@@ -654,66 +598,55 @@ const Room = () => {
             >
               <Palette className="w-4 h-4" />
             </button>
-            <button
-              className={`header-icon-btn ${showGames ? "active" : ""}`}
-              onClick={() => setShowGames(v => !v)}
-              title="Games"
-            >
-              <Gamepad2 className="w-4 h-4" />
-            </button>
-            <button
-              className={`header-icon-btn ${showVoiceChat ? "active" : ""}`}
-              style={showVoiceChat ? { color: "#34d399", background: "rgba(52,211,153,0.12)" } : {}}
-              onClick={() => setShowVoiceChat(v => !v)}
-              title="Voice chat"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-            <button
-              className={`header-icon-btn ${showMembers ? "active" : ""}`}
-              onClick={() => setShowMembers(v => !v)}
-              title="Members"
-            >
-              <Users className="w-4 h-4" />
-            </button>
 
-            {/* ⋯ Settings */}
+            {/* Room ID popover */}
             <div className="relative">
               <button
                 className="header-icon-btn"
-                onClick={() => setShowSettings(v => !v)}
-                aria-label="Room settings"
+                onClick={() => setShowRoomId(v => !v)}
+                title="Room ID"
               >
-                <MoreVertical className="w-4 h-4" />
+                <Hash className="w-4 h-4" />
               </button>
               <AnimatePresence>
-                {showSettings && (
+                {showRoomId && (
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.93, y: -6 }}
+                    initial={{ opacity: 0, scale: 0.94, y: -4 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.93, y: -6 }}
-                    transition={{ duration: 0.14 }}
-                    className="absolute right-0 top-full mt-2 w-44 rounded-2xl overflow-hidden z-50 shadow-2xl"
+                    exit={{ opacity: 0, scale: 0.94, y: -4 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute right-0 top-full mt-1.5 w-48 rounded-xl p-3 z-50 shadow-2xl"
                     style={{ background: "#0a1e30", border: "1px solid rgba(255,255,255,0.09)" }}
                   >
-                    <button
-                      onClick={() => { setShowSettings(false); setConfirmLeave(true); }}
-                      className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-white/70 hover:bg-white/6 hover:text-white transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" /> Leave Room
-                    </button>
-                    {isAdmin && (
-                      <button
-                        onClick={() => { setShowSettings(false); setConfirmDelete(true); }}
-                        className="w-full flex items-center gap-2.5 px-4 py-3 text-[13px] text-red-400 hover:bg-red-500/10 transition-colors"
+                    <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "6px" }}>Room ID</p>
+                    <div className="flex items-center gap-2">
+                      <code
+                        className="flex-1 px-2 py-1.5 rounded text-[13px] font-mono"
+                        style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.8)" }}
                       >
-                        <Trash2 className="w-4 h-4" /> Delete Room
+                        {currentRoom?.roomId || roomId}
+                      </code>
+                      <button
+                        onClick={handleCopyRoomId}
+                        className="p-1.5 rounded hover:bg-white/8 transition-colors"
+                        title="Copy"
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-white/40" />}
                       </button>
-                    )}
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Leave room */}
+            <button
+              className="header-icon-btn"
+              onClick={() => setConfirmLeave(true)}
+              title="Leave room"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -918,120 +851,83 @@ const Room = () => {
                 />
 
                 {/* Input pill */}
-                <form
-                  onSubmit={handleSend}
-                  className="composer-input-wrap flex-1"
-                >
-                  {/* Emoji picker (inside form for position) */}
-                  {showEmojiPicker && (
-                    <Suspense fallback={null}>
-                      <div className="absolute bottom-full right-0 pb-2 z-30">
-                        <EmojiPicker
-                          onSelect={emoji => setNewMessage(p => p + emoji)}
-                          onClose={() => setShowEmojiPicker(false)}
-                        />
-                      </div>
-                    </Suspense>
-                  )}
-
+                <form onSubmit={handleSend} className="composer-input-wrap">
                   <textarea
                     ref={textareaRef}
                     value={newMessage}
                     onChange={e => { setNewMessage(e.target.value); handleTyping(e.target.value); }}
-                    onKeyDown={e => {
-                      if (e.key === "Escape") { setReplyTo(null); setShowMentions(false); }
-                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); }
-                    }}
-                    placeholder={replyTo ? `Reply to ${replyTo.sender?.username}…` : "Send a message…"}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
+                    placeholder="Send a message…"
                     rows={1}
-                    aria-label="Message input"
+                    className="composer-input"
                   />
-
-                  {/* Emoji button */}
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker(v => !v)}
-                    aria-label="Emoji"
-                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors"
-                    style={{ color: showEmojiPicker ? "var(--c-accent)" : "rgba(255,255,255,0.35)" }}
+                    className="composer-emoji-btn"
+                    title="Emoji"
                   >
-                    <Smile className="w-4.5 h-4.5" />
+                    <Smile className="w-5 h-5" />
                   </button>
                 </form>
 
                 {/* Send */}
                 <button
+                  type="submit"
                   onClick={handleSend}
-                  disabled={!newMessage.trim() || uploading}
+                  disabled={!newMessage.trim()}
                   className="composer-send-btn"
                   aria-label="Send message"
-                  title="Send message"
+                  title="Send"
                 >
-                  <Send className="w-[18px] h-[18px]" />
+                  <Send className="w-5 h-5" />
                 </button>
               </div>
-
-              {uploading && (
-                <p className="mt-1.5 flex items-center gap-1.5 px-1" style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>
-                  <span className="w-3 h-3 rounded-full border-2 border-t-accent animate-spin" style={{ borderColor: "rgba(196,107,74,0.3)", borderTopColor: "var(--c-accent)" }} />
-                  Uploading…
-                </p>
-              )}
             </div>
           </div>
 
-          {/* Members panel */}
-          <AnimatePresence>
-            {showMembers && (
-              <MembersSidebar room={currentRoom} onClose={() => setShowMembers(false)} />
-            )}
-          </AnimatePresence>
-
-          {/* Games panel */}
-          <AnimatePresence>
-            {showGames && (
-              <Suspense fallback={<div className="w-80 rounded-3xl skeleton" />}>
-                <GamesPanel roomId={roomId} onClose={() => setShowGames(false)} />
-              </Suspense>
-            )}
-          </AnimatePresence>
+          {/* Games Panel */}
+          {showGames && (
+            <Suspense fallback={null}>
+              <GamesPanel roomId={roomId} onClose={() => setShowGames(false)} />
+            </Suspense>
+          )}
         </div>
       </div>
 
-      {/* ── Modals ── */}
-      <AnimatePresence>
-        {showBgSelector && (
-          <BackgroundSelector
-            currentBackground={chatBg}
-            onChange={handleBgChange}
-            onClose={() => setShowBgSelector(false)}
+      {/* ══════════════════════════════════════════
+          MODALS
+          ══════════════════════════════════════════ */}
+      {confirmLeave && (
+        <ConfirmModal
+          title="Leave Room?"
+          message={`Are you sure you want to leave "${currentRoom?.name}"?`}
+          confirmLabel="Leave"
+          onConfirm={doLeave}
+          onClose={() => setConfirmLeave(false)}
+        />
+      )}
+
+      {showBgSelector && (
+        <BackgroundSelector
+          selectedId={chatBg}
+          onSelect={handleBgChange}
+          onClose={() => setShowBgSelector(false)}
+        />
+      )}
+
+      {showEmojiPicker && (
+        <Suspense fallback={null}>
+          <EmojiPicker
+            onEmojiSelect={emoji => {
+              setNewMessage(m => m + emoji);
+              setShowEmojiPicker(false);
+              textareaRef.current?.focus();
+            }}
+            onClose={() => setShowEmojiPicker(false)}
           />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showCreate && <CreateRoomModal onClose={() => setShowCreate(false)} />}
-        {showJoin   && <JoinRoomModal   onClose={() => setShowJoin(false)} />}
-      </AnimatePresence>
-
-      <ConfirmModal
-        isOpen={confirmLeave}
-        onClose={() => setConfirmLeave(false)}
-        onConfirm={doLeave}
-        title="Leave Room?"
-        message={`You will no longer see messages from "${currentRoom?.name}". You can rejoin with the room code.`}
-        confirmText="Leave"
-        cancelText="Stay"
-      />
-      <ConfirmModal
-        isOpen={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        onConfirm={doDelete}
-        title={`Delete "${currentRoom?.name}"?`}
-        message="This permanently deletes all messages, games, and room data. This action cannot be undone."
-        confirmText="Delete Forever"
-        isDanger
-      />
+        </Suspense>
+      )}
     </div>
   );
 };
