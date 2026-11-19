@@ -13,7 +13,7 @@ const api = axios.create({
 export const getFileUrl = (url) => {
   if (!url) return null;
   // If it's already a full URL (Cloudinary), return as is
-  if (url.startsWith('http://') || url.startsWith('https://')) {
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
     return url;
   }
   // If it's a local path, prepend the API URL

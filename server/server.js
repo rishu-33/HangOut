@@ -33,7 +33,8 @@ const io = new Server(httpServer, {
         origin: process.env.CLIENT_URL,
         methods: ['GET', 'POST'],
         credentials: true
-    }
+    },
+    perMessageDeflate: false
 });
 setIO(io);
 

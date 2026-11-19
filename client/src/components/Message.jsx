@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Trash2, Smile, Download, FileText, Reply, Copy, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -152,11 +152,8 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
 
   // ── Bubble row ──────────────────────────────────────────────────────────────
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 5 }}
-      animate={{ opacity: message._optimistic ? 0.65 : 1, y: 0 }}
-      transition={{ duration: 0.1 }}
-      className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} group`}
+    <div
+      className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} group ${message._optimistic ? 'opacity-70' : ''}`}
       onMouseEnter={revealActions}
       onMouseLeave={scheduleHide}
     >
@@ -332,8 +329,11 @@ const Message = ({ message, currentUser, onReaction, onDeleted, onReply }) => {
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 };
 
-export default Message;
+export default memo(Message, (prev, next) => (
+  prev.message === next.message &&
+  prev.currentUser?._id === next.currentUser?._id
+));

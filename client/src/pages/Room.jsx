@@ -352,10 +352,20 @@ const Room = () => {
     // New message received
     socket.on('new-message', (message) => {
       setMessages(prev => {
-        // Skip if already present (optimistic bubble was replaced, or duplicate)
         if (prev.some(m => String(m._id) === String(message._id))) return prev;
-        // Also skip any temp optimistic that matches by content+sender (edge case)
-        return [...prev, message];
+
+        const senderId = message.sender?._id || message.sender;
+        const tempIndex = prev.findIndex((m) => {
+          if (!m._optimistic) return false;
+          if (String(m.sender?._id || m.sender) !== String(senderId)) return false;
+          if (m.type === 'text' || !m.type) return m.content === message.content;
+          return m.type === message.type;
+        });
+        if (tempIndex === -1) return [...prev, message];
+
+        const next = prev.slice();
+        next[tempIndex] = message;
+        return next;
       });
     });
 
@@ -438,7 +448,7 @@ const Room = () => {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   };
 
   const handleSendMessage = async (e) => {
@@ -482,9 +492,12 @@ const Room = () => {
         ...(replyId ? { replyTo: replyId } : {})
       });
 
-      // Server now broadcasts new-message to all room members directly.
-      // Just replace the optimistic bubble with the confirmed message for the sender.
-      setMessages(prev => prev.map(m => m._id === tempId ? data : m));
+      setMessages(prev => {
+        if (prev.some(m => String(m._id) === String(data._id))) {
+          return prev.filter(m => m._id !== tempId);
+        }
+        return prev.map(m => m._id === tempId ? data : m);
+      });
 
     } catch (error) {
       // Remove failed optimistic bubble and restore input
@@ -547,6 +560,24 @@ const Room = () => {
       return;
     }
 
+    const tempId = `temp-file-${Date.now()}`;
+    const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
+    setMessages(prev => [...prev, {
+      _id: tempId,
+      _optimistic: true,
+      content: '',
+      sender: user,
+      createdAt: new Date().toISOString(),
+      type: file.type.startsWith('image/') ? 'image' : 'file',
+      reactions: [],
+      file: {
+        url: previewUrl,
+        filename: file.name,
+        mimetype: file.type,
+        size: file.size
+      }
+    }]);
+
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
@@ -556,14 +587,18 @@ const Room = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      // Server broadcasts the file message to everyone — just show it locally for sender
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setMessages(prev => {
-        if (prev.some(m => String(m._id) === String(data._id))) return prev;
-        return [...prev, data];
+        if (prev.some(m => String(m._id) === String(data._id))) {
+          return prev.filter(m => m._id !== tempId);
+        }
+        return prev.map(m => (m._id === tempId ? data : m));
       });
 
       toast.success('File uploaded');
     } catch (error) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setMessages(prev => prev.filter(m => m._id !== tempId));
       console.error('Upload error:', error);
       toast.error(error.response?.data?.message || 'Failed to upload file. Please check Cloudinary configuration.');
     } finally {
