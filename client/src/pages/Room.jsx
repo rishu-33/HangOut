@@ -86,6 +86,7 @@ const Room = () => {
   const textareaRef      = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef     = useRef(null);
+  const pendingOnlineIds = useRef(null); // stores room-users IDs that arrived before room loaded
 
   /* ── fetch rooms ── */
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
@@ -115,6 +116,19 @@ const Room = () => {
         };
         setCurrentRoom(updatedRoom);
         setMessages(msgsData.messages);
+        // Apply any room-users event that arrived before room data loaded
+        if (pendingOnlineIds.current) {
+          const onlineSet = new Set(pendingOnlineIds.current.map(String));
+          const patched = {
+            ...updatedRoom,
+            members: updatedRoom.members?.map(m => ({
+              ...m,
+              user: { ...m.user, status: onlineSet.has(String(m.user?._id || m.user)) ? "online" : "offline" }
+            }))
+          };
+          setCurrentRoom(patched);
+          pendingOnlineIds.current = null;
+        }
       } catch {
         if (cancelled) return;
         toast.error("Failed to load room");
@@ -168,12 +182,16 @@ const Room = () => {
     const onTypingStop  = ({ username }) => setTypingUsers(p => { const s = new Set(p); s.delete(username); return s; });
     const onDeleted     = ({ messageId }) => setMessages(p => p.filter(m => String(m._id) !== String(messageId)));
     const onReaction    = ({ messageId, reactions }) => setMessages(p => p.map(m => String(m._id) === String(messageId) ? { ...m, reactions } : m));
-    const onRoomUsers   = (ids) => {
+    const onRoomUsers = (ids) => {
       const room = useRoomStore.getState().currentRoom;
-      if (!room?.members) return;
-      const set = new Set(ids.map(String));
+      if (!room?.members) {
+        // Room not loaded yet — store IDs to apply after load
+        pendingOnlineIds.current = ids;
+        return;
+      }
+      const onlineSet = new Set(ids.map(String));
       updateRoomMembers(room.roomId, room.members.map(m => ({
-        ...m, user: { ...m.user, status: set.has(String(m.user?._id || m.user)) ? "online" : "offline" }
+        ...m, user: { ...m.user, status: onlineSet.has(String(m.user?._id || m.user)) ? "online" : "offline" }
       })));
     };
     const onProfileUpdated = ({ userId, username, avatar }) => {
@@ -956,6 +974,7 @@ const Room = () => {
 };
 
 export default Room;
+
 
 
 
