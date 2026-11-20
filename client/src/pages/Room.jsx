@@ -719,8 +719,8 @@ const Room = () => {
                     return (
                       <div
                         key={row.id}
-                        className="px-4"
-                        style={{ paddingTop: row.isFirst ? "10px" : "2px", paddingBottom: "2px" }}
+                        className="px-6"
+                        style={{ paddingTop: row.isFirst ? "16px" : "3px", paddingBottom: "3px" }}
                       >
                         <Message
                           message={row.msg}
@@ -891,7 +891,7 @@ const Room = () => {
                     value={newMessage}
                     onChange={e => { setNewMessage(e.target.value); handleTyping(e.target.value); }}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
-                    placeholder="Send a message…"
+                    placeholder="Send a message…" style={{ fontSize: "15px" }}
                     rows={1}
                     className="composer-input"
                   />
@@ -974,6 +974,7 @@ const Room = () => {
 };
 
 export default Room;
+
 
 
 
